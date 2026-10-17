@@ -84,10 +84,16 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
   let clientBundle: string | null = null;
   let serverBundle: string | null = null;
   let realHandlers: string[] | null = null;
+  let realEvalError: string | null = null;
   let realEvalMs: number | null = null;
   if (paseoSource) {
     const real = await compileWithPaseo(dir, paseoSource);
-    if (real.error) {
+    if (real.error && real.stage === "evaluate") {
+      add("paseo-compile", "pass", "Paseo's compilePlugin accepted the plugin");
+      clientBundle = real.clientBundle;
+      serverBundle = real.serverBundle;
+      realEvalError = real.error;
+    } else if (real.error) {
       add("paseo-compile", "fail", `Paseo ${real.stage} failed: ${real.error.split("\n")[0]}`, real.error.split("\n").slice(1, 20));
     } else {
       add("paseo-compile", "pass", `Paseo's compilePlugin accepted the plugin (${relative(process.cwd(), paseoSource) || paseoSource})`);
@@ -120,7 +126,9 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
   }
 
   if (serverBundle) {
-    if (realHandlers) {
+    if (realEvalError) {
+      add("server-eval", "fail", `Paseo's evaluator failed on the server bundle: ${realEvalError}`);
+    } else if (realHandlers) {
       add("server-eval", "pass", `Paseo's evaluator ran the contribution in ${realEvalMs} ms; RPCs: ${realHandlers.join(", ") || "none"}`);
     } else {
       try {
@@ -175,7 +183,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
     const unknownStatic = [...staticIcons].filter((icon) => !contributionIcons.has(icon) && !lucide.names.has(icon));
     if (unknownContrib.length) add("lucide-icons", "fail", `unknown Lucide names in contributions (Paseo throws at registration): ${unknownContrib.join(", ")}`);
     else if (unknownStatic.length) add("lucide-icons", "warn", `unknown Lucide names in client source (Icon renders nothing): ${unknownStatic.join(", ")}`);
-    else add("lucide-icons", "pass", `${contributionIcons.size + staticIcons.size} icon name(s) valid against ${lucide.names.size} Lucide icons`);
+    else add("lucide-icons", "pass", `${new Set([...contributionIcons, ...staticIcons]).size} icon name(s) valid against ${lucide.names.size} Lucide icons`);
   }
 
   const maxClient = options.maxClientBytes ?? DEFAULT_MAX_CLIENT_BYTES;

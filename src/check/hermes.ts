@@ -76,6 +76,7 @@ function stub(thenable) {
         return function (resolve) { var value = stub(false); return Promise.resolve(resolve ? resolve(value) : value); };
       }
       if (key === "__esModule") return true;
+      if (typeof key === "string" && /^define[A-Z]/.test(key)) return function (value) { return value; };
       if (key === "OS") return "ios";
       if (key === "length") return 0;
       if (key === Symbol.iterator) return function () { return { next: function () { return { done: true }; } }; };

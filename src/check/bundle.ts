@@ -42,6 +42,7 @@ function makeStub(thenable: boolean): unknown {
         };
       }
       if (key === "__esModule") return true;
+      if (typeof key === "string" && /^define[A-Z]/.test(key)) return (value: unknown) => value;
       if (key === Symbol.toPrimitive) return () => "";
       if (key === Symbol.iterator) return function* () {};
       if (key === "OS") return "ios";
