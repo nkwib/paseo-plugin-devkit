@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: node dist/cli.js check test/fixtures/good-plugin
+
+  paseo-main:
+    name: tests against Paseo main
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      PASEO_SOURCE: ${{ github.workspace }}/paseo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: devkit
+      - uses: actions/checkout@v4
+        with:
+          repository: getpaseo/paseo
+          ref: main
+          path: paseo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            devkit/package-lock.json
+            paseo/package-lock.json
+      - working-directory: paseo
+        run: npm ci && npm run build:client && npm run build:plugin
+      - working-directory: devkit
+        run: npm ci && npm test

@@ -1,0 +1,21 @@
+# Paseo plugin host contract
+
+What Paseo 0.11 actually gives a plugin at runtime. `ppd check` tests the rows marked (checked).
+
+| Area | Contract | What to do |
+| --- | --- | --- |
+| Client modules (checked) | Only `react`, `react/jsx-runtime`, `react-native`, `@tanstack/react-query`, `zod`, `@getpaseo/plugin`, `@getpaseo/plugin/client`, `/client/ui`, `/client/react-native`. Any other runtime require throws `Module "<name>" is not available in plugin client code`. Other npm packages are fine only if esbuild bundles them fully. | Keep host modules in `devDependencies`. |
+| Gestures (checked) | No `react-native-gesture-handler` or `react-native-reanimated`. | Build pinch and double tap from `onResponder*` / `PanResponder` and `Animated`. |
+| Safe area (checked) | Plugin panels get no safe-area insets (getpaseo/paseo#5866, PR #5867). The Android nav bar can cover the last rows. | Pad the bottom yourself; runtime-detect a host `useSafeAreaInsets` export if one appears. |
+| Horizontal scroll | A plugin horizontal `ScrollView` is not registered with the host, so a fast right swipe on a zoomed page opens the mobile sidebar. | Known limit; keep horizontal panning short or behind a mode. |
+| Icons (checked) | Contribution `icon` fields are Lucide names, validated at registration: an unknown name throws and the item silently disappears. `Icon` from `/client/react-native` renders nothing for an unknown name. No `lucide-react-native` import. | Check names against the app's lucide-react-native version (`ppd check` with `PASEO_SOURCE`). |
+| Hermes (checked) | iOS and Android evaluate the client bundle from source on Hermes. Class syntax fails to parse (getpaseo/paseo#5783), including classes inside bundled dependencies. Paseo lowers async/await for you. | Functions and closures instead of classes; check dependencies too. |
+| Server bundle (checked) | Compiled to one CJS string and `eval`'d in a plugin subprocess. Bare requires other than host modules and Node built-ins resolve from Paseo's install, not the plugin. WASM must be inlined (a 12.6 MB bundle parsed in about 60 ms). No native addons, no file-path WASM, no assumption of system binaries. | Pure JS/WASM dependencies, bundled. |
+| Git installs (checked) | The manifest `build` runs in a fresh checkout before compile. Runtime packages must be in `dependencies` with a committed lock and `["npm", "ci", "--omit=dev", "--ignore-scripts"]`. | `ppd install --git` exercises this path. |
+| Type walk (checked) | Paseo <= 0.11.4 type-walks installed packages; `@types/node` 26 pulled in `node:stream/iter` and failed installs (getpaseo/paseo#7145). | Pin `@types/node` to `~22`. |
+| RPC timeout | 30 s per RPC (`REQUEST_TIMEOUT_MS`). Handlers get no abort signal (hooks do get `context.signal`). After a timeout the handler keeps running and holding memory and concurrency. | Deadline every heavy job (`Promise.race`), cap input sizes, test worst-case fixtures with `assertWithinRpcBudget`. Synchronous WASM cannot be interrupted. |
+| Crashes | A crashed plugin child is not respawned (getpaseo/paseo#6821). One out-of-memory parse takes the plugin down until `paseo plugin reload`. | Size and decompression caps before parsing; stream large formats. |
+| Response size | Direct websocket messages cap at 100 MiB; clients behind the relay should budget well under 32 MiB. Large base64 images add up fast. | Page or chunk responses; budget bytes per response. |
+| MIME and previews | The daemon labels many binaries `application/octet-stream`; the Files tree has no previewer hook for plugins (getpaseo/paseo#3109, #5930). | Detect formats by magic bytes; provide your own entry points (panel, Command Center item, slash command). |
+| Media | No native video primitive (#4562). Host `playAudio` exists from 0.11.2. | Plan media features around what the host exposes. |
+| Theme and layout | Color every `Text` from `theme.colors`; size layout from `layout.compact`. No HTML elements, no `className`. | Test both `ppd web` viewports. |

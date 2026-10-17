@@ -41,7 +41,7 @@ export function lintOverview(text: string, properNouns: readonly string[] = DEFA
   let fence = false;
   lines.forEach((raw, index) => {
     const line = index + 1;
-    if (raw.includes("—")) findings.push({ level: "error", line, message: "em dash: use a colon, comma, parentheses or a period" });
+    if (raw.includes("\u2014")) findings.push({ level: "error", line, message: "em dash: use a colon, comma, parentheses or a period" });
     for (const pattern of INSTALL_COMMANDS) {
       if (pattern.test(raw)) findings.push({ level: "error", line, message: `install command (${raw.match(pattern)![0]}): the listing already shows installation; link to your README` });
     }

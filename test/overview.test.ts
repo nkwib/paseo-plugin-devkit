@@ -3,7 +3,7 @@ import { lintOverview, titleCaseWords } from "../src/registry/overview.ts";
 
 describe("OVERVIEW lint", () => {
   it("flags em dashes and install commands as errors", () => {
-    const findings = lintOverview("Views PDFs — fast.\n\nRun `paseo plugin add acme/x` or npm install x.\n");
+    const findings = lintOverview("Views PDFs \u2014 fast.\n\nRun `paseo plugin add acme/x` or npm install x.\n");
     expect(findings.filter((f) => f.level === "error").map((f) => f.line)).toEqual([1, 3, 3]);
   });
 

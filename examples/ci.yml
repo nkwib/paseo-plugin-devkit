@@ -1,0 +1,65 @@
+# Plugin CI with paseo-plugin-devkit. Copy to .github/workflows/ci.yml in your plugin.
+# Assumes paseo-plugin-devkit is a devDependency and package.json has typecheck/test scripts.
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1" # weekly: catch Paseo main breaking you before users do
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Approximate compile, eval, imports, Hermes parse/VM, bundle size.
+      # Real-compiler and Lucide checks skip without PASEO_SOURCE.
+      - run: npx ppd check
+      - run: npx ppd registry precheck
+
+  paseo-main:
+    name: host contract on Paseo main
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      PASEO_SOURCE: ${{ github.workspace }}/paseo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: plugin
+      - uses: actions/checkout@v4
+        with:
+          repository: getpaseo/paseo
+          ref: main
+          path: paseo
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            plugin/package-lock.json
+            paseo/package-lock.json
+      - name: Install Paseo
+        working-directory: paseo
+        run: npm ci && npm run build:client && npm run build:plugin
+      - name: Install plugin with the latest SDK
+        working-directory: plugin
+        run: npm ci && npm install --no-save @getpaseo/plugin@latest
+      - working-directory: plugin
+        run: npm run typecheck
+      # Real Paseo compiler + evaluator, Lucide names from the app's icon set.
+      - working-directory: plugin
+        run: npx ppd check

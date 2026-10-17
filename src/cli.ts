@@ -17,8 +17,9 @@ Dev daemon (isolated: temp home, never port 6767, never ~/.paseo)
   daemon status [--name N] [--json]
   install <dir> [--git] [--id ID] [--name N]   install a plugin into the dev daemon
   paseo -- <args...>                          run the Paseo CLI against the dev daemon
-  web [--shot FILE] [--viewport WxH] [--path /route] [--headed] [--name N]
-  android up|down [--serial S] [--name N]     adb reverse to the dev daemon (never changes device settings)
+  web [--shot FILE] [--viewport WxH] [--path /route] [--workspace ID]
+      [--command TEXT] [--click LABEL]... [--wait MS] [--full-page] [--headed] [--name N]
+  android up|down|status [--serial S] [--name N]  adb reverse to the dev daemon (read-only device checks)
   doctor [--json]                             toolchain report
 
 Host contract
