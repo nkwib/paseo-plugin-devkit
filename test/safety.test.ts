@@ -111,4 +111,9 @@ describe("Paseo CLI targeting", () => {
     expect(env.PASEO_HOME).toBe("/tmp/h");
     expect(env.PASEO_LISTEN).toBe("127.0.0.1:7800");
   });
+
+  it("drops the caller's PASEO_* agent variables (probe-bridge: they leaked into the test daemon)", () => {
+    const env = devDaemonEnv({ PASEO_AGENT_ID: "a1", PASEO_AGENT_CWD: "/w", PASEO_CLI: "/x/paseo", PASEO_NODE_ENV: "development", PATH: "/bin" }, "/tmp/h");
+    expect(Object.keys(env).sort()).toEqual(["PASEO_HOME", "PASEO_NODE_ENV", "PATH"]);
+  });
 });

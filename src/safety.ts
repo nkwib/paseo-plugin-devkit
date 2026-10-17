@@ -115,9 +115,17 @@ export function paseoArgsForHome(args: readonly string[], home: string): string[
   return [...args, "--home", home];
 }
 
-/** Environment for any child process that talks to a dev daemon. */
+/** Inherited PASEO_* variables a dev daemon may keep. Everything else (PASEO_AGENT_ID, PASEO_CLI, ...) is dropped. */
+export const PASEO_ENV_PASSTHROUGH = new Set(["PASEO_NODE_ENV"]);
+
+/**
+ * Environment for any child process that talks to a dev daemon. Inherited PASEO_* variables are dropped: run
+ * from an agent inside Paseo, they name the caller's agent, CLI and host, and must not leak into the test daemon.
+ */
 export function devDaemonEnv(base: NodeJS.ProcessEnv, home: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...base, PASEO_HOME: home, ...extra };
-  delete env.PASEO_HOST;
-  return env;
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (!key.startsWith("PASEO_") || PASEO_ENV_PASSTHROUGH.has(key)) env[key] = value;
+  }
+  return { ...env, PASEO_HOME: home, ...extra };
 }
