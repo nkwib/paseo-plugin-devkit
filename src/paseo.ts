@@ -1,13 +1,15 @@
 // Locating the Paseo CLI and web UI build on this machine, and calling the CLI against a dev daemon.
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { firstExisting, run, which, type RunResult } from "./proc.ts";
 import { devDaemonEnv, paseoArgsForHome } from "./safety.ts";
 
+/** An explicit path (or PASEO_BIN) must exist: a typo never falls back to another Paseo. */
 export function findPaseoBin(explicit?: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  const wanted = explicit ?? env.PASEO_BIN;
+  if (wanted) return existsSync(wanted) ? wanted : null;
   return firstExisting([
-    explicit,
-    env.PASEO_BIN,
     which("paseo", env),
     join(homedir(), ".local/bin/paseo"),
     "/Applications/Paseo.app/Contents/Resources/bin/paseo",
@@ -21,8 +23,8 @@ export function paseoVersion(bin: string): string | null {
 
 /** A static Paseo web export: the desktop app ships one, or build one from source with `npm run build:daemon-web-ui`. */
 export function findWebDist(explicit?: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (explicit) return existsSync(join(explicit, "index.html")) ? explicit : null;
   const candidates = [
-    explicit,
     env.PASEO_WEB_UI_DIST_DIR,
     "/Applications/Paseo.app/Contents/Resources/app-dist",
     join(homedir(), "Applications/Paseo.app/Contents/Resources/app-dist"),

@@ -160,13 +160,13 @@ describe("registry precheck robustness and drift", () => {
 });
 
 describe("tool discovery", () => {
-  it.fails("does not silently fall back when an explicit --paseo path does not exist", () => {
+  it("does not silently fall back when an explicit --paseo path does not exist", () => {
     expect(findPaseoBin("/nonexistent/paseo")).toBeNull();
   });
 });
 
 describe("daemon lifecycle", () => {
-  it.fails("removes the temp home of a stale (dead) daemon record before starting a new one", async () => {
+  it("removes the temp home of a stale (dead) daemon record before starting a new one", async () => {
     const state = scratch("ppd-review-state-");
     const previous = process.env.PPD_STATE_DIR;
     process.env.PPD_STATE_DIR = state;

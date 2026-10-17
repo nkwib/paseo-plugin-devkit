@@ -48,6 +48,8 @@ describe("pickPort", () => {
 
   it("refuses an explicit port that is in use", async () => {
     await expect(pickPort(7810, async () => false)).rejects.toThrow(/in use/);
+    // A busy port is an ordinary error (exit 1), not a safety refusal (exit 3).
+    await expect(pickPort(7810, async () => false)).rejects.not.toBeInstanceOf(SafetyError);
   });
 });
 

@@ -80,14 +80,14 @@ export function buildDaemonConfig(listen: string, webDist: string | null): objec
 export async function pickPort(requested: number | undefined, isFree: (port: number) => Promise<boolean> = isPortFree): Promise<number> {
   if (requested !== undefined) {
     assertSafePort(requested);
-    if (!(await isFree(requested))) throw new SafetyError(`port ${requested} is already in use`);
+    if (!(await isFree(requested))) throw new Error(`port ${requested} is already in use: pick another --port or omit it`);
     return requested;
   }
   for (let port: number = DEFAULT_PORT_RANGE.first; port <= DEFAULT_PORT_RANGE.last; port++) {
     if (port === REAL_DAEMON_PORT) continue;
     if (await isFree(port)) return port;
   }
-  throw new SafetyError(`no free port in ${DEFAULT_PORT_RANGE.first}-${DEFAULT_PORT_RANGE.last}; pass --port`);
+  throw new Error(`no free port in ${DEFAULT_PORT_RANGE.first}-${DEFAULT_PORT_RANGE.last}; pass --port`);
 }
 
 /** Live means the pid is alive and its command line names this record's home. */
@@ -122,15 +122,25 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
   const log = options.log ?? console.log;
   const existing = readDaemon(name);
   if (existing && isDaemonLive(existing)) {
+    if (options.port !== undefined && options.port !== existing.port) {
+      throw new Error(`dev daemon "${name}" is already running on port ${existing.port}: run \`ppd daemon down${name === "default" ? "" : ` --name ${name}`}\` first, or pass --name for a second daemon`);
+    }
     log(`dev daemon "${name}" already running at ${existing.url} (pid ${existing.pid})`);
     return existing;
   }
-  if (existing) forgetDaemon(name);
+  if (existing) {
+    removeHome(existing.home, log);
+    forgetDaemon(name);
+  }
 
   const paseoBin = findPaseoBin(options.paseo);
-  if (!paseoBin) throw new Error("Paseo CLI not found: install Paseo, put `paseo` on PATH, or pass --paseo / PASEO_BIN");
-  const port = await pickPort(options.port);
+  if (!paseoBin) {
+    const wanted = options.paseo ?? process.env.PASEO_BIN;
+    throw new Error(wanted ? `Paseo CLI ${wanted} does not exist` : "Paseo CLI not found: install Paseo, put `paseo` on PATH, or pass --paseo / PASEO_BIN");
+  }
   const webDist = findWebDist(options.webDist);
+  if (options.webDist && !webDist) throw new Error(`--web-dist ${options.webDist} has no index.html`);
+  const port = await pickPort(options.port);
   const home = assertSafeHome(mkdtempSync(join(canonicalPath(tmpdir()), `ppd-${name}-`)));
   writeFileSync(join(home, HOME_MARKER), `created by paseo-plugin-devkit for daemon "${name}"\n`);
   const listen = `127.0.0.1:${port}`;
@@ -228,14 +238,25 @@ export async function daemonDown(options: DownOptions = {}): Promise<boolean> {
   if (record.caffeinatePid && isPidAlive(record.caffeinatePid) && processCommand(record.caffeinatePid)?.includes("caffeinate")) {
     process.kill(record.caffeinatePid, "SIGTERM");
   }
-  if (!options.keepHome && existsSync(join(home, HOME_MARKER))) {
-    rmSync(home, { recursive: true, force: true });
-    log(`removed ${home}`);
-  } else if (options.keepHome) {
+  if (!options.keepHome) removeHome(home, log);
+  else {
     log(`kept ${home}`);
   }
   forgetDaemon(name);
   return true;
+}
+
+/** Removes a home ppd created (it carries HOME_MARKER and passes assertSafeHome); anything else is left alone. */
+function removeHome(home: string, log: (line: string) => void): void {
+  let safe: string;
+  try {
+    safe = assertSafeHome(home);
+  } catch {
+    return;
+  }
+  if (!existsSync(join(safe, HOME_MARKER))) return;
+  rmSync(safe, { recursive: true, force: true });
+  log(`removed ${safe}`);
 }
 
 function signalGroup(pid: number, signal: NodeJS.Signals): void {
