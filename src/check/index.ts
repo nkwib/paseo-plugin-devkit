@@ -132,10 +132,11 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
     add("server-requires", bad.length ? "fail" : "pass", bad.length ? `server bundle leaves bare requires that resolve from Paseo's install, not the plugin: ${bad.join(", ")}` : "server requires only host modules and Node built-ins");
   }
 
+  const lucide = lucideIconNames([paseoSource, dir]);
   const evalTimeoutMs = options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS;
   const [serverOutcome, clientOutcome] = await Promise.all([
     serverBundle && !realEvalError && !realHandlers ? evaluateIsolated("server", serverBundle, dir, { timeoutMs: evalTimeoutMs }) : null,
-    clientBundle ? evaluateIsolated("client", clientBundle, dir, { timeoutMs: evalTimeoutMs }) : null,
+    clientBundle ? evaluateIsolated("client", clientBundle, dir, { timeoutMs: evalTimeoutMs, icons: lucide?.names ?? null }) : null,
   ]);
   if (serverBundle) {
     if (realEvalError) {
@@ -192,7 +193,6 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
     }
   }
 
-  const lucide = lucideIconNames([paseoSource, dir]);
   const staticIcons = new Set(files.client.flatMap((file) => staticIconNames(readFileSync(file, "utf8"))));
   if (!lucide) {
     add("lucide-icons", "skip", `no lucide-react-native type list (${PASEO_SOURCE_MISSING}); icons seen: ${[...new Set([...contributionIcons, ...staticIcons])].join(", ") || "none"}`);

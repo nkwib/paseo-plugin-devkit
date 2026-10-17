@@ -36,6 +36,23 @@ describe("compiled fixtures", () => {
     expect(evaluation.setupError).toBeNull();
   });
 
+  it("applies the app's registration rules: unknown icons, ids and missing cleanup are contract errors", async () => {
+    const good = await evaluateClientBundle(await compileLikePaseo(join(GOOD, "index.client.tsx"), "client"), GOOD, { icons: new Set(["Hand", "MessageCircle"]) });
+    expect(good.contractErrors).toEqual([]);
+    const bundle = `(function(require) { const m = { exports: {} }; m.exports.default = function (client) {
+      client.addWorkspacePanel({ id: "Bad_Id", title: "x", icon: "HandWave", context: "workspace", Component: function () {} });
+      client.addSidebarWidget({ id: "w" });
+    }; return m.exports; })`;
+    const bad = await evaluateClientBundle(bundle, GOOD, { icons: new Set(["Hand"]) });
+    expect(bad.contractErrors).toEqual([
+      "Invalid workspace panel id: Bad_Id",
+      "client.addSidebarWidget is not part of the app's plugin client context (calling it throws)",
+      "Plugin contribution must return a cleanup function",
+    ]);
+    const icon = await evaluateClientBundle(bundle.replace("Bad_Id", "panel"), GOOD, { icons: new Set(["Hand"]) });
+    expect(icon.contractErrors).toContain("Unknown Lucide icon: HandWave");
+  });
+
   it("throws the app's error for a module the host does not provide", async () => {
     const bundle = '(function(require) { const m = { exports: {} }; require("react-native-svg"); m.exports.default = function () {}; return m.exports; })';
     await expect(evaluateClientBundle(bundle, GOOD)).rejects.toThrow('Module "react-native-svg" is not available in plugin client code');

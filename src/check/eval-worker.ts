@@ -28,13 +28,13 @@ try {
       contractErrors: evaluation.contractErrors,
     };
   } else {
-    const evaluation = await evaluateClientBundle(bundle, request.pluginDir);
+    const evaluation = await evaluateClientBundle(bundle, request.pluginDir, { icons: request.icons ? new Set(request.icons) : null });
     result = {
       target: "client",
       contributions: evaluation.contributions.map((entry) => entry.method),
       icons: evaluation.icons,
       setupError: evaluation.setupError,
-      contractErrors: [],
+      contractErrors: evaluation.contractErrors,
     };
   }
 } catch (error) {

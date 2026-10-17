@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import { ClientRules } from "./client-rules.ts";
 import { CLIENT_HOST_MODULES, isHostClientModule, isHostServerModule, isNodeBuiltin, SDK_CLIENT_ONLY } from "./host.ts";
 
 /** Runtime `require("x")` calls left in a compiled bundle, i.e. modules the host must supply. */
@@ -132,7 +133,17 @@ export interface ClientContribution {
 export interface ClientEvaluation {
   contributions: ClientContribution[];
   icons: string[];
+  /** The contribution threw: under stub host modules this may be a stub limit rather than a plugin bug. */
   setupError: string | null;
+  /** Registrations the app rejects (client-rules.ts). Any one of them hides the plugin's whole client. */
+  contractErrors: string[];
+}
+
+export interface ClientEvaluationOptions {
+  /** Time to let async work in the contribution fail (default 50 ms). */
+  settleMs?: number;
+  /** The app's Lucide names. When given, unknown contribution icons are contract errors, like in the app. */
+  icons?: ReadonlySet<string> | null;
 }
 
 /** Icon names in a contribution: `icon` fields up to two levels deep (header buttons nest them). */
@@ -147,11 +158,11 @@ export function contributionIcons(value: unknown, depth = 0): string[] {
 }
 
 /**
- * Evaluates a client bundle in Node with the host's module list enforced and records every `add*` call
- * of the contribution. React Native and SDK client modules are stubs; react and zod are real when installed.
- * A module outside the host list throws the same error the app shows.
+ * Evaluates a client bundle in Node with the host's module list enforced, records every `add*` call of the
+ * contribution and checks it against the app's registration rules. React Native and SDK client modules are
+ * stubs; react and zod are real when installed. A module outside the host list throws the same error the app shows.
  */
-export async function evaluateClientBundle(bundle: string, pluginDir: string, settleMs = 50): Promise<ClientEvaluation> {
+export async function evaluateClientBundle(bundle: string, pluginDir: string, options: ClientEvaluationOptions = {}): Promise<ClientEvaluation> {
   const req = pluginRequire(pluginDir);
   const real = new Set(["react", "react/jsx-runtime", "zod", "@getpaseo/plugin"]);
   const requireModule = (name: string) => {
@@ -161,6 +172,7 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, se
     return (real.has(name) ? tryRequire(req, name) : undefined) ?? chainStub();
   };
   const setup = evaluateFactory<(client: unknown) => unknown>(bundle, requireModule);
+  const rules = new ClientRules(options.icons ?? null);
   const contributions: ClientContribution[] = [];
   const client = new Proxy(
     {},
@@ -168,9 +180,10 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, se
       get: (_, key) => {
         if (typeof key !== "string") return undefined;
         if (/^add[A-Z]/.test(key)) {
-          return (contribution: unknown) => {
-            contributions.push({ method: key, contribution });
-            return chainStub();
+          return (...args: unknown[]) => {
+            rules.register(key, args);
+            contributions.push({ method: key, contribution: args[0] });
+            return key === "addComposerPill" || key === "addHeaderButton" ? chainStub() : () => {};
           };
         }
         return chainStub();
@@ -182,15 +195,20 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, se
   const onRejection = (reason: unknown) => asyncErrors.push(String((reason as Error)?.message ?? reason));
   process.on("unhandledRejection", onRejection);
   try {
-    setup(client);
-    await new Promise((resolve) => setTimeout(resolve, settleMs));
+    rules.finish(setup(client));
+    await new Promise((resolve) => setTimeout(resolve, options.settleMs ?? 50));
   } catch (error) {
     setupError = (error as Error).message;
   } finally {
     process.off("unhandledRejection", onRejection);
   }
   setupError ??= asyncErrors[0] ? `async: ${asyncErrors[0]}` : null;
-  return { contributions, icons: [...new Set(contributions.flatMap((entry) => contributionIcons(entry.contribution)))], setupError };
+  return {
+    contributions,
+    icons: [...new Set(contributions.flatMap((entry) => contributionIcons(entry.contribution)))],
+    setupError,
+    contractErrors: rules.errors,
+  };
 }
 
 export interface SizeReport {

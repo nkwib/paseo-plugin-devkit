@@ -113,7 +113,7 @@ describe("host-contract drift: compiler boundaries (compiler.ts directoryTarget)
 });
 
 describe("host-contract drift: client registration (packages/app/src/plugins/evaluate.ts)", () => {
-  it.fails("fails contributions the app rejects: bad id, bad context, missing callback, duplicate id, no cleanup", async () => {
+  it("fails contributions the app rejects: bad id, bad context, missing callback, duplicate id, no cleanup", async () => {
     const dir = variant({
       "index.client.tsx": `import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { HelloPanel } from "./client/hello-panel";
