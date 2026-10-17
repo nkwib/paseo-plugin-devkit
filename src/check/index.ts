@@ -213,7 +213,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
 
   const staticIcons = new Set(files.client.flatMap((file) => staticIconNames(readFileSync(file, "utf8"))));
   if (!lucide) {
-    add("lucide-icons", "skip", `no Lucide list (${PASEO_SOURCE_MISSING}, and the plugin has no lucide-react-native); icons seen: ${[...new Set([...contributionIcons, ...staticIcons])].join(", ") || "none"}`);
+    add("lucide-icons", "skip", `no Lucide list (${options.paseoApp === null ? "--approx turns off the app's list" : PASEO_SOURCE_MISSING}, and the plugin has no lucide-react-native); icons seen: ${[...new Set([...contributionIcons, ...staticIcons])].join(", ") || "none"}`);
   } else {
     const against = lucide.exact ? `${lucide.names.size} Lucide icons of the ${host ? describeHost(host) : "host"}` : `${lucide.names.size} icons of the plugin's own lucide-react-native (approximation: may differ from the app's version)`;
     const unknownContrib = [...contributionIcons].filter((icon) => !lucide.names.has(icon));
