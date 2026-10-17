@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { run, runOrThrow } from "../proc.ts";
+import { compareVersions } from "../release.ts";
 import { canonicalPath } from "../safety.ts";
 
 export const UPSTREAM_REGISTRY = "getpaseo/plugins";
@@ -132,6 +133,10 @@ export function registryUpdate(pluginDir: string, options: UpdateOptions): Updat
     runOrThrow("git", ["add", path], { cwd: registry });
     runOrThrow("git", ["commit", "--quiet", "-m", `Update ${record.id} to ${tag}`], { cwd: registry });
     log(`branch ${plan.branch}: ${record.id} ${plan.from.tag ?? plan.from.commit.slice(0, 7)} -> ${tag} (${commit.slice(0, 7)})`);
+    const semver = /^v?\d+\.\d+\.\d+/;
+    if (plan.from.tag && semver.test(plan.from.tag) && semver.test(tag) && compareVersions(tag.replace(/^v/, ""), plan.from.tag.replace(/^v/, "")) < 0) {
+      log(`warning: ${tag} is older than the listed ${plan.from.tag}`);
+    }
 
     const tmp = canonicalTmpdir();
     try {

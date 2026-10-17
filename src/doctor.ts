@@ -48,7 +48,7 @@ function firstLine(command: string, args: string[]): string | null {
 
 export function collectDoctor(): DoctorItem[] {
   const items: DoctorItem[] = [];
-  const add = (name: string, level: Level, detail: string) => items.push({ name, level, detail });
+  const add = (name: string, level: Level, detail: string) => items.push({ name, level, detail: detail.split(homedir()).join("~") });
 
   add("node", nodeVersionOk(process.version) ? "ok" : "warn", `${process.version} (need >= ${MIN_NODE.join(".")})`);
   const paseo = findPaseoBin();
