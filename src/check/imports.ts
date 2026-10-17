@@ -1,6 +1,6 @@
 // Source-level import scan: directory boundaries, forbidden client packages and runtime dependency placement.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { extname, join, relative } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { CLIENT_FORBIDDEN_PACKAGES, isHostProvidedPackage, isNodeBuiltin, packageName } from "./host.ts";
 
 const CODE = new Set([".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts"]);
@@ -42,6 +42,17 @@ export function pluginFiles(pluginDir: string): PluginFiles {
   };
 }
 
+/** Where a module may live, like Paseo's compiler.ts directoryTarget. Null for node_modules. */
+export function moduleLocation(relativePath: string): Runtime | "invalid" | null {
+  const segments = relativePath.split(/[\\/]/);
+  if (relativePath.startsWith("..") || isAbsolute(relativePath)) return "invalid";
+  if (segments.includes("node_modules")) return null;
+  if (segments[0] === "client" || segments[0] === "server" || segments[0] === "shared") return segments[0];
+  if (/^index\.client\.tsx?$/.test(relativePath)) return "client";
+  if (/^index\.server\.tsx?$/.test(relativePath)) return "server";
+  return "invalid";
+}
+
 export interface Finding {
   level: "error" | "warn";
   message: string;
@@ -65,6 +76,16 @@ export function boundaryFindings(pluginDir: string, files: PluginFiles): Finding
     }
   };
   for (const runtime of ["client", "server", "shared"] as const) for (const file of files[runtime]) check(runtime, file);
+  // Paseo's compiler (directoryTarget) rejects any plugin module outside client/, server/ and shared/, even an unused import.
+  for (const file of [...files.client, ...files.server, ...files.shared]) {
+    for (const specifier of importSpecifiers(readFileSync(file, "utf8"))) {
+      if (!specifier.startsWith(".")) continue;
+      const target = relative(pluginDir, resolve(dirname(file), specifier));
+      if (moduleLocation(target) === "invalid") {
+        findings.push({ level: "error", message: `${relative(pluginDir, file)} imports ${specifier}: plugin modules belong in client/, server/ or shared/ (Paseo's compiler rejects ${target})` });
+      }
+    }
+  }
   return findings;
 }
 

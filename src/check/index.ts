@@ -3,11 +3,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { bundleRequires, disallowedClientRequires, disallowedServerRequires, formatKb, sizeReport } from "./bundle.ts";
-import { compileLikePaseo, compileWithHost, describeHost, findEntries, findPaseoApp, findPaseoHost, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
+import { compileApprox, CompileError, compileLikePaseo, compileWithHost, describeHost, findEntries, findPaseoApp, findPaseoHost, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
 import { cleanupWarning, DEFAULT_EVAL_TIMEOUT_MS, evaluateIsolated } from "./isolate.ts";
 import { hostIconNames, staticIconNames } from "./lucide.ts";
+import { manifestFindings } from "./manifest.ts";
 import { UsageError } from "../usage.ts";
 
 export type Status = "pass" | "warn" | "fail" | "skip";
@@ -36,10 +37,10 @@ export const DEFAULT_MAX_CLIENT_BYTES = 2 * 1024 * 1024;
 export const DEFAULT_MAX_SERVER_BYTES = 32 * 1024 * 1024;
 
 interface Manifest {
-  id?: string;
-  requirements?: { paseo?: string };
-  build?: string[][];
-  icon?: string;
+  id?: unknown;
+  requirements?: { paseo?: unknown };
+  build?: unknown;
+  icon?: unknown;
   [key: string]: unknown;
 }
 
@@ -57,19 +58,21 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
   let manifest: Manifest;
   try {
     manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("not a JSON object");
   } catch (error) {
     add("manifest", "fail", `paseo-plugin.json is not valid JSON: ${(error as Error).message}`);
     return results;
   }
   const entries = findEntries(dir);
+  const vendored = manifestFindings(manifest);
   const manifestProblems = [
-    !manifest.id && "missing id",
-    !manifest.requirements?.paseo && "missing requirements.paseo",
+    ...vendored.errors,
     !entries.client && !entries.server && "no index.client.tsx/ts or index.server.ts/tsx",
-    ...Object.keys(manifest).filter((key) => key.startsWith("$")).map((key) => `editor key ${key} in manifest`),
-    manifest.icon && !existsSync(resolve(dir, manifest.icon)) && `icon ${manifest.icon} does not exist`,
+    typeof manifest.icon === "string" && !existsSync(resolve(dir, manifest.icon)) && `icon ${manifest.icon} does not exist`,
   ].filter((problem): problem is string => Boolean(problem));
-  add("manifest", manifestProblems.length ? "fail" : "pass", manifestProblems.length ? manifestProblems.join("; ") : `${manifest.id}, requires paseo ${manifest.requirements?.paseo}`);
+  if (manifestProblems.length) add("manifest", "fail", manifestProblems.join("; "), vendored.warnings);
+  else if (vendored.warnings.length) add("manifest", "warn", vendored.warnings.join("; "));
+  else add("manifest", "pass", `${manifest.id}, requires paseo ${manifest.requirements?.paseo}`);
   if (!entries.client && !entries.server) return results;
 
   const files = pluginFiles(dir);
@@ -79,7 +82,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
   let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> } = {};
   if (existsSync(resolve(dir, "package.json"))) pkg = JSON.parse(readFileSync(resolve(dir, "package.json"), "utf8"));
   const imported = externalPackages([...files.client, ...files.server, ...files.shared]);
-  const deps = dependencyFindings(imported, pkg, manifest.build);
+  const deps = dependencyFindings(imported, pkg, Array.isArray(manifest.build) ? manifest.build : undefined);
   const typesNode = typesNodeFinding(pkg);
   if (typesNode) deps.push(typesNode);
   add(
@@ -115,15 +118,17 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       realCleanupWarning = cleanupWarning(real);
     }
   } else {
-    add("paseo-compile", "skip", `APPROXIMATION: ${PASEO_SOURCE_MISSING}. Compile, evaluation and icon checks below use an esbuild replica and rules vendored from Paseo, not the host itself`);
+    const why = options.paseoApp === null ? "the real compiler was turned off (--approx)" : PASEO_SOURCE_MISSING;
+    add("paseo-compile", "skip", `APPROXIMATION: ${why}. Compile, evaluation and icon checks below use an esbuild replica and rules vendored from Paseo, not the host itself`);
   }
   if (!host || (!clientBundle && !serverBundle)) {
     try {
-      if (entries.client) clientBundle = await compileLikePaseo(entries.client, "client");
-      if (entries.server) serverBundle = await compileLikePaseo(entries.server, "server");
+      if (entries.client) clientBundle = (await compileApprox(entries.client, "client")).bundle;
+      if (entries.server) serverBundle = (await compileApprox(entries.server, "server")).bundle;
       add("approx-compile", "pass", "approximation: esbuild with Paseo 0.11's build options compiled both entries");
     } catch (error) {
-      add("approx-compile", "fail", `esbuild compile failed: ${(error as Error).message.split("\n")[0]}`);
+      const locations = error instanceof CompileError ? error.locations : [(error as Error).message];
+      add("approx-compile", "fail", `esbuild compile failed: ${locations[0]}`, locations.slice(1, 20));
       return results;
     }
   }
@@ -308,7 +313,7 @@ export async function checkClient(pluginDir: string, options: CheckOptions = {})
   try {
     bundle = await compileLikePaseo(entry, "client");
   } catch (error) {
-    return { errors: [`client compile failed: ${(error as Error).message.split("\n")[0]}`], notes: [], iconSource: null };
+    return { errors: [`client compile failed: ${(error as Error).message}`], notes: [], iconSource: null };
   }
   const outcome = await evaluateIsolated("client", bundle, dir, { timeoutMs: options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS, icons: lucide?.names ?? null });
   const iconSource = lucide?.source ?? null;

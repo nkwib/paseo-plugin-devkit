@@ -5,6 +5,7 @@ import { bundleRequires, disallowedClientRequires, disallowedServerRequires, eva
 import { compileLikePaseo, findPaseoApp, findPaseoSource } from "../src/check/compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "../src/check/hermes.ts";
 import { runChecks } from "../src/check/index.ts";
+import { manifestFindings } from "../src/check/manifest.ts";
 import { appIconNames, parseBundleIconNames, parseLucideNames, staticIconNames } from "../src/check/lucide.ts";
 import { EXAMPLE, FIXTURES } from "./helpers.ts";
 
@@ -69,7 +70,7 @@ describe("runChecks", () => {
   it("passes the example plugin on the approximation and labels it as such", async () => {
     const results = await runChecks(GOOD, { paseoSource: null, paseoApp: null });
     expect(results.filter((r) => r.status === "fail")).toEqual([]);
-    expect(results.find((r) => r.id === "paseo-compile")).toMatchObject({ status: "skip", message: expect.stringMatching(/^APPROXIMATION: .*PASEO_APP.*PASEO_SOURCE/) });
+    expect(results.find((r) => r.id === "paseo-compile")).toMatchObject({ status: "skip", message: expect.stringMatching(/^APPROXIMATION: .*--approx/) });
     expect(results.find((r) => r.id === "approx-compile")?.message).toMatch(/^approximation:/);
   });
 
@@ -141,6 +142,20 @@ describe("Lucide names", () => {
 
   it("finds icon literals in client source", () => {
     expect(staticIconNames(`{ icon: "FileText" } <Button icon="Search" /> <Icon name={"ZoomIn"} size={4} />`).sort()).toEqual(["FileText", "Search", "ZoomIn"]);
+  });
+});
+
+describe("manifest rules (vendored from Paseo's manifest.ts)", () => {
+  it("accepts the example, warns on unknown keys, rejects bad shapes", () => {
+    const base = { id: "hello", requirements: { paseo: ">=0.11.2" } };
+    expect(manifestFindings({ ...base, $comment: "x" })).toEqual({ errors: [], warnings: [] });
+    expect(manifestFindings({ ...base, requirement: {} }).warnings).toEqual(['unknown key "requirement" is ignored by Paseo (typo?)']);
+    expect(manifestFindings({ ...base, media: "a.png", icon: "icon.svg", build: [["npm", " "]] }).errors).toEqual([
+      "icon icon.svg must be a PNG",
+      "media must be a list of package paths or https URLs",
+      'build must be a non-empty list of argv arrays, e.g. [["npm", "ci", "--omit=dev", "--ignore-scripts"]]; shell strings are rejected',
+    ]);
+    expect(manifestFindings({ id: "hello" }).errors[0]).toMatch(/missing requirements.paseo/);
   });
 });
 

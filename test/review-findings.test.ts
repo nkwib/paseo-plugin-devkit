@@ -88,14 +88,14 @@ describe("ppd check runs plugin code in its own process", () => {
 });
 
 describe("ppd check messages", () => {
-  it.fails("shows where an esbuild compile error is, not only 'Build failed with 1 error:'", async () => {
+  it("shows where an esbuild compile error is, not only 'Build failed with 1 error:'", async () => {
     const dir = variant({ "client/hello-panel.tsx": [/$/, "\nexport const broken = ;\n"] });
     const compile = (await byId(dir)).get("approx-compile")!;
     expect(compile.status).toBe("fail");
     expect([compile.message, ...(compile.details ?? [])].join("\n")).toMatch(/hello-panel\.tsx:\d+:\d+/);
   });
 
-  it.fails("does not crash on a non-array manifest build", async () => {
+  it("does not crash on a non-array manifest build", async () => {
     const dir = manifestWith({ build: "npm ci" });
     const results = await byId(dir);
     expect(results.get("manifest")?.status).toBe("fail");
@@ -103,22 +103,22 @@ describe("ppd check messages", () => {
 });
 
 describe("host-contract drift: manifest (packages/server/src/server/plugins/manifest.ts)", () => {
-  it.fails("accepts $comment, which `paseo plugin init` writes and Paseo's non-strict schema ignores", async () => {
+  it("accepts $comment, which `paseo plugin init` writes and Paseo's non-strict schema ignores", async () => {
     expect((await byId(manifestWith({ $comment: "scaffold note" }))).get("manifest")?.status).toBe("pass");
   });
 
-  it.fails("rejects ids outside /^[a-z][a-z0-9-]*$/ (protocol plugin-config.ts PluginIdSchema)", async () => {
+  it("rejects ids outside /^[a-z][a-z0-9-]*$/ (protocol plugin-config.ts PluginIdSchema)", async () => {
     expect((await byId(manifestWith({ id: "Hello_Plugin" }))).get("manifest")?.status).toBe("fail");
   });
 
-  it.fails("rejects an invalid requirements.paseo range and unknown requirement keys (strict schema)", async () => {
+  it("rejects an invalid requirements.paseo range and unknown requirement keys (strict schema)", async () => {
     expect((await byId(manifestWith({ requirements: { paseo: "0.11+" } }))).get("manifest")?.status).toBe("fail");
     expect((await byId(manifestWith({ requirements: { paseo: ">=0.11.2", pasoe: ">=1" } }))).get("manifest")?.status).toBe("fail");
   });
 });
 
 describe("host-contract drift: compiler boundaries (compiler.ts directoryTarget)", () => {
-  it.fails("fails a module outside client/, server/ and shared/, which Paseo's compiler rejects", async () => {
+  it("fails a module outside client/, server/ and shared/, which Paseo's compiler rejects", async () => {
     const dir = variant({
       "lib/label.ts": 'export const LABEL = "Hello";\n',
       "index.client.tsx": [/^/, 'import { LABEL } from "./lib/label";\n'],

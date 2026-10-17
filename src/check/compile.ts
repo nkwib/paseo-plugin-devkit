@@ -111,22 +111,49 @@ function wrapCommonJs(code: string): string {
 
 /** esbuild with the options of Paseo 0.11's compileTarget. Returns the wrapped `(function(require) {...})` bundle. */
 export async function compileLikePaseo(entry: string, target: Target): Promise<string> {
-  const result = await build({
-    entryPoints: [entry],
-    bundle: true,
-    format: "cjs",
-    jsx: "automatic",
-    platform: target === "server" ? "node" : "neutral",
-    target: target === "server" ? "node20" : "es2020",
-    ...(target === "client" ? { mainFields: ["module", "main"], supported: { "async-await": false } } : {}),
-    external: target === "client" ? [...CLIENT_HOST_MODULES] : [...SERVER_HOST_MODULES, ...SDK_SPECIFIERS],
-    logLevel: "silent",
-    treeShaking: true,
-    write: false,
-  });
+  return (await compileApprox(entry, target)).bundle;
+}
+
+/** Thrown for esbuild errors, one `file:line:column: text` line per error, paths relative to the plugin. */
+export class CompileError extends Error {
+  override name = "CompileError";
+  readonly locations: string[];
+  constructor(locations: string[]) {
+    super(locations[0] ?? "compile failed");
+    this.locations = locations;
+  }
+}
+
+export interface ApproxCompile {
+  bundle: string;
+}
+
+/** compileLikePaseo with esbuild errors as a CompileError. The entry sits at the plugin root. */
+export async function compileApprox(entry: string, target: Target): Promise<ApproxCompile> {
+  let result;
+  try {
+    result = await build({
+      entryPoints: [entry],
+      absWorkingDir: dirname(resolve(entry)),
+      bundle: true,
+      format: "cjs",
+      jsx: "automatic",
+      platform: target === "server" ? "node" : "neutral",
+      target: target === "server" ? "node20" : "es2020",
+      ...(target === "client" ? { mainFields: ["module", "main"], supported: { "async-await": false } } : {}),
+      external: target === "client" ? [...CLIENT_HOST_MODULES] : [...SERVER_HOST_MODULES, ...SDK_SPECIFIERS],
+      logLevel: "silent",
+      treeShaking: true,
+      write: false,
+    });
+  } catch (error) {
+    const messages = (error as { errors?: { text: string; location?: { file: string; line: number; column: number } | null }[] }).errors;
+    if (!messages?.length) throw error;
+    throw new CompileError(messages.map((m) => (m.location ? `${m.location.file}:${m.location.line}:${m.location.column + 1}: ${m.text}` : m.text)));
+  }
   const output = result.outputFiles[0]?.text;
   if (!output) throw new Error(`${target} compilation produced no output`);
-  return wrapCommonJs(output.replaceAll("get: () => from[key]", "value: from[key]"));
+  return { bundle: wrapCommonJs(output.replaceAll("get: () => from[key]", "value: from[key]")) };
 }
 
 export interface PaseoCompileResult {
