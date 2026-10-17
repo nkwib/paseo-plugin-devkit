@@ -88,7 +88,8 @@ export async function devLoop(pluginDir: string, options: DevOptions = {}): Prom
   const poll = setInterval(() => {
     if (!running) printLogs();
   }, options.logIntervalMs ?? 2000);
-  log(`watching ${relative(process.cwd(), dir) || "."} (Ctrl+C to stop)`);
+  const shown = relative(process.cwd(), dir) || ".";
+  log(`watching ${shown.startsWith("..") ? dir : shown} (Ctrl+C to stop)`);
   try {
     await (options.until ?? new Promise<void>(() => {}));
   } finally {

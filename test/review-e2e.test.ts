@@ -27,7 +27,7 @@ describe.skipIf(!enabled)("review findings against a dev daemon (PPD_E2E=1)", ()
     expect((await installPlugin(EXAMPLE, { name, log: () => {} })).status).toBe("running");
   }, 120_000);
 
-  it("surfaces a plugin whose client failed to evaluate (unknown icon): install says running, web says no errors", async () => {
+  it("surfaces a plugin whose client the app fails to evaluate (unknown icon) in install or web", async () => {
     const dir = join(scratch("ppd-review-e2e-"), "bad-icon");
     cpSync(EXAMPLE, dir, { recursive: true });
     const entry = join(dir, "index.client.tsx");
@@ -53,7 +53,7 @@ describe.skipIf(!enabled)("review findings against a dev daemon (PPD_E2E=1)", ()
     const loop = devLoop(dir, { name, id: "dev-loop", debounceMs: 100, log: (line) => lines.push(line), until });
     const waitFor = async (pattern: RegExp) => {
       for (let i = 0; i < 120 && !lines.some((line) => pattern.test(line)); i++) await new Promise((resolve) => setTimeout(resolve, 250));
-      expect(lines.join("\n")).toMatch(pattern);
+      expect(lines.some((line) => pattern.test(line)), lines.join("\n")).toBe(true);
     };
     try {
       await waitFor(/^watching /);
