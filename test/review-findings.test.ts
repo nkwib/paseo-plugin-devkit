@@ -40,7 +40,7 @@ function ppd(args: string[], timeout = 20_000) {
 const byId = async (dir: string) => new Map((await runChecks(dir, { paseoSource: null })).map((result) => [result.id, result]));
 
 describe("ppd check runs plugin code in its own process", () => {
-  it.fails("exits when the server contribution starts a timer (it hangs forever today)", () => {
+  it("exits when the server contribution starts a timer", () => {
     const dir = variant({
       "index.server.ts": [
         "server.handle(greetRpc, ({ name }) => greet(name));\n  return () => {};",
@@ -52,10 +52,22 @@ describe("ppd check runs plugin code in its own process", () => {
     expect(result.status).toBe(0);
   });
 
-  it.fails("does not report success when plugin code calls process.exit(0) at load", () => {
+  it("does not report success when plugin code calls process.exit(0) at load", () => {
     const dir = variant({ "server/greet.ts": [/$/, "\nprocess.exit(0);\n"] });
     const result = ppd(["check", dir]);
     expect(result.status).not.toBe(0);
+    expect(result.stdout).toMatch(/FAIL\s+server-eval.*process\.exit\(0\)/);
+  });
+
+  it("fails, instead of hanging, when client code loops forever at load", async () => {
+    const dir = variant({ "client/hello-panel.tsx": [/$/, "\nwhile (Date.now() > 0) {}\n"] });
+    const results = await runChecks(dir, { paseoSource: null, evalTimeoutMs: 2000 });
+    expect(results.find((result) => result.id === "client-eval")).toMatchObject({ status: "fail", message: expect.stringMatching(/did not finish within 2 s/) });
+  });
+
+  it("fails a server contribution that returns no cleanup function (plugin-process.ts)", async () => {
+    const dir = variant({ "index.server.ts": ["return () => {};", "return undefined as never;"] });
+    expect((await byId(dir)).get("server-eval")).toMatchObject({ status: "fail", message: expect.stringContaining("cleanup") });
   });
 });
 

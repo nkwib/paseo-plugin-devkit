@@ -84,6 +84,8 @@ export interface ServerEvaluation {
   handlers: Map<string, Handler>;
   registrations: string[];
   evalMs: number;
+  /** Host rules the contribution broke (plugin-process.ts): it must return a cleanup function. */
+  contractErrors: string[];
 }
 
 /**
@@ -117,8 +119,9 @@ export function evaluateServerBundle(bundle: string, pluginDir: string, override
           : undefined,
     },
   );
-  setup(server);
-  return { handlers, registrations, evalMs };
+  const cleanup = setup(server);
+  const contractErrors = typeof cleanup === "function" ? [] : ["Plugin contribution must return a cleanup function"];
+  return { handlers, registrations, evalMs, contractErrors };
 }
 
 export interface ClientContribution {

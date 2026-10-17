@@ -2,10 +2,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { bundleRequires, disallowedClientRequires, disallowedServerRequires, evaluateClientBundle, evaluateServerBundle, formatKb, sizeReport } from "./bundle.ts";
+import { bundleRequires, disallowedClientRequires, disallowedServerRequires, formatKb, sizeReport } from "./bundle.ts";
 import { compileLikePaseo, compileWithPaseo, findEntries, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
+import { DEFAULT_EVAL_TIMEOUT_MS, evaluateIsolated } from "./isolate.ts";
 import { lucideIconNames, staticIconNames } from "./lucide.ts";
 import { UsageError } from "../usage.ts";
 
@@ -22,6 +23,10 @@ export interface CheckOptions {
   paseoSource?: string | null;
   maxClientBytes?: number;
   maxServerBytes?: number;
+  /** Kill plugin evaluation after this long (default 30 s, Paseo's plugin init timeout). */
+  evalTimeoutMs?: number;
+  /** Kill Paseo's compile step after this long (default 120 s). */
+  compileTimeoutMs?: number;
 }
 
 export const DEFAULT_MAX_CLIENT_BYTES = 2 * 1024 * 1024;
@@ -88,7 +93,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
   let realEvalError: string | null = null;
   let realEvalMs: number | null = null;
   if (paseoSource) {
-    const real = await compileWithPaseo(dir, paseoSource);
+    const real = await compileWithPaseo(dir, paseoSource, options.compileTimeoutMs);
     if (real.error && real.stage === "evaluate") {
       add("paseo-compile", "pass", "Paseo's compilePlugin accepted the plugin");
       clientBundle = real.clientBundle;
@@ -102,6 +107,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       serverBundle = real.serverBundle;
       realHandlers = real.handlers;
       realEvalMs = real.evalMs;
+      if (real.serverBundle && real.returnsCleanup === false) realEvalError = "Plugin contribution must return a cleanup function";
     }
   } else {
     add("paseo-compile", "skip", `real compiler not run: ${PASEO_SOURCE_MISSING}`);
@@ -126,32 +132,43 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
     add("server-requires", bad.length ? "fail" : "pass", bad.length ? `server bundle leaves bare requires that resolve from Paseo's install, not the plugin: ${bad.join(", ")}` : "server requires only host modules and Node built-ins");
   }
 
+  const evalTimeoutMs = options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS;
+  const [serverOutcome, clientOutcome] = await Promise.all([
+    serverBundle && !realEvalError && !realHandlers ? evaluateIsolated("server", serverBundle, dir, { timeoutMs: evalTimeoutMs }) : null,
+    clientBundle ? evaluateIsolated("client", clientBundle, dir, { timeoutMs: evalTimeoutMs }) : null,
+  ]);
   if (serverBundle) {
     if (realEvalError) {
       add("server-eval", "fail", `Paseo's evaluator failed on the server bundle: ${realEvalError}`);
     } else if (realHandlers) {
       add("server-eval", "pass", `Paseo's evaluator ran the contribution in ${realEvalMs} ms; RPCs: ${realHandlers.join(", ") || "none"}`);
-    } else {
-      try {
-        const evaluation = evaluateServerBundle(serverBundle, dir);
-        add("server-eval", "pass", `evaluated in ${evaluation.evalMs} ms; RPCs: ${[...evaluation.handlers.keys()].join(", ") || "none"}`);
-        realEvalMs = evaluation.evalMs;
-      } catch (error) {
-        add("server-eval", "fail", `server bundle failed to evaluate: ${(error as Error).message}`);
+    } else if (serverOutcome && !serverOutcome.ok) {
+      add("server-eval", "fail", `server bundle failed to evaluate: ${serverOutcome.error}`);
+    } else if (serverOutcome?.ok) {
+      const result = serverOutcome.result;
+      if ("error" in result) add("server-eval", "fail", `server bundle failed to evaluate: ${result.error}`);
+      else if (result.target === "server") {
+        realEvalMs = result.evalMs;
+        if (result.contractErrors.length) add("server-eval", "fail", `Paseo would stop this plugin: ${result.contractErrors.join("; ")}`);
+        else add("server-eval", "pass", `evaluated in ${result.evalMs} ms; RPCs: ${result.handlers.join(", ") || "none"}`);
       }
     }
   }
 
   const contributionIcons = new Set<string>();
   if (clientBundle) {
-    try {
-      const evaluation = await evaluateClientBundle(clientBundle, dir);
-      evaluation.icons.forEach((icon) => contributionIcons.add(icon));
-      const summary = `contributions: ${evaluation.contributions.map((c) => c.method).join(", ") || "none"}`;
-      if (evaluation.setupError) add("client-eval", "warn", `contribution threw under stub host modules (may be a stub limit): ${evaluation.setupError}`, [summary]);
-      else add("client-eval", "pass", summary);
-    } catch (error) {
-      add("client-eval", "fail", `client bundle failed to evaluate: ${(error as Error).message}`);
+    if (clientOutcome && !clientOutcome.ok) {
+      add("client-eval", "fail", `client bundle failed to evaluate: ${clientOutcome.error}`);
+    } else if (clientOutcome?.ok) {
+      const result = clientOutcome.result;
+      if ("error" in result) add("client-eval", "fail", `client bundle failed to evaluate: ${result.error}`);
+      else if (result.target === "client") {
+        result.icons.forEach((icon) => contributionIcons.add(icon));
+        const summary = `contributions: ${result.contributions.join(", ") || "none"}`;
+        if (result.contractErrors.length) add("client-eval", "fail", "the app would reject this plugin client and show none of its UI", [...result.contractErrors, summary]);
+        else if (result.setupError) add("client-eval", "warn", `contribution threw under stub host modules (may be a stub limit): ${result.setupError}`, [summary]);
+        else add("client-eval", "pass", summary);
+      }
     }
 
     const classErrors = await classSyntaxErrors(clientBundle);

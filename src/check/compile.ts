@@ -1,16 +1,13 @@
 // Compiling a plugin the way Paseo does. With a Paseo source checkout (PASEO_SOURCE) this runs Paseo's own
 // manifest reader, compilePlugin and server bundle evaluator. Without one it uses an esbuild approximation
 // of the same build options, which misses Paseo's import-boundary and type-walk checks.
-import { execFile } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { build } from "esbuild";
 import { CLIENT_HOST_MODULES, SDK_SPECIFIERS, SERVER_HOST_MODULES } from "./host.ts";
-
-const execFileAsync = promisify(execFile);
+import { describeNoResult, runChild } from "./isolate.ts";
 
 export type Target = "client" | "server";
 
@@ -68,28 +65,54 @@ export async function compileLikePaseo(entry: string, target: Target): Promise<s
 
 export interface PaseoCompileResult {
   error?: string;
-  stage?: "manifest" | "compile" | "evaluate";
+  /** Where Paseo stopped: load (modules), manifest, compile, evaluate (server bundle). */
+  stage?: "load" | "manifest" | "compile" | "evaluate";
   clientBundle: string | null;
   serverBundle: string | null;
   handlers: string[];
   registrations: string[];
   evalMs: number | null;
+  /** False when the server contribution did not return a cleanup function. Null when not evaluated. */
+  returnsCleanup: boolean | null;
 }
 
-const SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), "../../scripts/paseo-compile.mts");
+const SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), "../../scripts/host-compile.mjs");
 
-/** Runs scripts/paseo-compile.mts with the checkout's tsx, so Paseo's own modules do the work. */
-export async function compileWithPaseo(pluginDir: string, paseoSource: string): Promise<PaseoCompileResult> {
+interface ScriptResult {
+  stage: "load" | "manifest" | "compiled" | "compile" | "evaluate" | "done";
+  error?: string;
+  handlers: string[];
+  registrations: string[];
+  evalMs: number | null;
+  returnsCleanup: boolean | null;
+}
+
+/**
+ * Runs scripts/host-compile.mjs in a child with a timeout, so Paseo's own modules do the work and plugin code
+ * (the server contribution) cannot hang or exit ppd. With a Paseo checkout the runtime is its tsx.
+ */
+export async function compileWithPaseo(pluginDir: string, paseoSource: string, timeoutMs = DEFAULT_COMPILE_TIMEOUT_MS): Promise<PaseoCompileResult> {
+  const plugins = join(paseoSource, "packages/server/src/server/plugins");
+  return runHostCompile(join(paseoSource, "node_modules/.bin/tsx"), [SCRIPT, plugins, ".ts", resolve(pluginDir)], { cwd: paseoSource, timeoutMs });
+}
+
+/** Compiling dv-sized plugins takes seconds; evaluation inside gets the host's 30 s on top. */
+export const DEFAULT_COMPILE_TIMEOUT_MS = 120_000;
+
+async function runHostCompile(command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs: number }): Promise<PaseoCompileResult> {
   const out = mkdtempSync(join(tmpdir(), "ppd-compile-"));
   try {
-    await execFileAsync(join(paseoSource, "node_modules/.bin/tsx"), [SCRIPT, paseoSource, resolve(pluginDir), out], {
-      cwd: paseoSource,
-      maxBuffer: 64 * 1024 * 1024,
-      timeout: 300_000,
-    });
-    const result = JSON.parse(readFileSync(join(out, "result.json"), "utf8")) as Omit<PaseoCompileResult, "clientBundle" | "serverBundle">;
+    const outcome = await runChild(command, [...args, out], { cwd: options.cwd ?? out, ...(options.env ? { env: options.env } : {}), timeoutMs: options.timeoutMs });
     const read = (name: string) => (existsSync(join(out, name)) ? readFileSync(join(out, name), "utf8") : null);
-    return { ...result, clientBundle: read("client.js"), serverBundle: read("server.js") };
+    const raw = read("result.json");
+    const result: ScriptResult = raw ? JSON.parse(raw) : { stage: "load", handlers: [], registrations: [], evalMs: null, returnsCleanup: null };
+    const base = { clientBundle: read("client.js"), serverBundle: read("server.js"), handlers: result.handlers, registrations: result.registrations, evalMs: result.evalMs, returnsCleanup: result.returnsCleanup };
+    if (result.stage === "done") return base;
+    if (result.error) return { ...base, stage: result.stage as NonNullable<PaseoCompileResult["stage"]>, error: result.error };
+    // No error recorded: the process was killed or exited mid-stage.
+    const stage = result.stage === "compiled" ? "evaluate" : result.stage === "load" ? "load" : "compile";
+    const what = stage === "evaluate" ? "the server contribution" : `Paseo's ${stage} step`;
+    return { ...base, stage, error: describeNoResult(outcome, options.timeoutMs, what) };
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
