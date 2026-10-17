@@ -32,7 +32,7 @@ function manifestWith(patch: Record<string, unknown>): string {
 
 /** The CLI without PASEO_SOURCE, so the approximate path runs on every machine. */
 function ppd(args: string[], timeout = 20_000) {
-  const env = { ...process.env, PPD_STATE_DIR: scratch("ppd-review-state-") };
+  const env: NodeJS.ProcessEnv = { ...process.env, PPD_STATE_DIR: scratch("ppd-review-state-") };
   delete env.PASEO_SOURCE;
   return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env, timeout });
 }
