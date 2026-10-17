@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { gitLocation } from "../git.ts";
 import { run } from "../proc.ts";
 import { UsageError } from "../usage.ts";
 import { precheck, type PrecheckFinding } from "./precheck.ts";
@@ -11,6 +12,17 @@ import { normalizeRemote, registryUpdate, UPSTREAM_REGISTRY } from "./update.ts"
 export function submissionUrl(title: string, source: string): string {
   const params = new URLSearchParams({ template: "submit-plugin.yml", title, source });
   return `https://github.com/${UPSTREAM_REGISTRY}/issues/new?${params.toString()}`;
+}
+
+/** The form's Source: the repository URL, or a folder URL (…/tree/<ref>/<path>) for a plugin in a subdirectory. */
+export function submissionSource(remote: string, pluginPath: string, ref: string): string {
+  const repo = normalizeRemote(remote);
+  return pluginPath ? `${repo}/tree/${ref}/${pluginPath}` : repo;
+}
+
+function currentRef(dir: string): string {
+  const branch = run("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: dir }).stdout.trim();
+  return branch || run("git", ["rev-parse", "HEAD"], { cwd: dir }).stdout.trim();
 }
 
 export function formatFindings(findings: PrecheckFinding[]): string {
@@ -55,12 +67,13 @@ export async function registryCommand(args: string[]): Promise<number> {
   if (sub === "submit") {
     const manifest = JSON.parse(readFileSync(join(dir, "paseo-plugin.json"), "utf8")) as { name?: string; id?: string };
     const remote = run("git", ["remote", "get-url", "origin"], { cwd: dir }).stdout.trim();
-    const source = remote ? normalizeRemote(remote).replace(/^https:\/\/github\.com/, "https://github.com") : "";
+    const source = remote ? submissionSource(remote, gitLocation(dir)?.path ?? "", currentRef(dir)) : "";
     const errors = precheck(dir).filter((finding) => finding.level === "error");
     if (errors.length) console.log(`${formatFindings(errors)}\n`);
     console.log(`Open this form in a browser and submit it yourself (do not use gh issue create: CLI issues miss the submission label):
   ${submissionUrl(manifest.name ?? manifest.id ?? "", source)}
-Then tick categories, add interface image URLs to the description if you have no media, and submit.
+Then tick categories and submit. The form only asks for the source and categories: the listing's images
+come from the manifest \`media\` (the first image is the card thumbnail).
 Afterwards verify: the issue has the "submission" label and the bot opens a review PR (intake retries every 30 minutes).`);
     if (!existsSync(join(dir, "OVERVIEW.md"))) console.log("Tip: ship OVERVIEW.md beside paseo-plugin.json to own your listing page.");
     return errors.length ? 1 : 0;

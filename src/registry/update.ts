@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { run, runOrThrow } from "../proc.ts";
 import { compareVersions } from "../release.ts";
+import { gitLocation } from "../git.ts";
 import { canonicalPath } from "../safety.ts";
 
 export const UPSTREAM_REGISTRY = "getpaseo/plugins";
@@ -32,23 +33,28 @@ export function githubSlug(remote: string): string | null {
   return match ? `${match[1]}/${match[2]}` : null;
 }
 
-export function matchRecord(records: { path: string; record: GitRecord }[], remote: string, id?: string): { path: string; record: GitRecord } | null {
+/** The record for an id, or for this remote and plugin path ("" for the repository root; monorepos list several). */
+export function matchRecord(records: { path: string; record: GitRecord }[], remote: string, id?: string, pluginPath = ""): { path: string; record: GitRecord } | null {
+  const clean = (path: string | undefined) => (path ?? "").replace(/^\.\/?/, "").replace(/\/+$/, "");
   return (
     records.find(({ record }) =>
-      id ? record.id === id : record.artifact?.kind === "git" && normalizeRemote(record.artifact.remote) === normalizeRemote(remote),
+      id
+        ? record.id === id
+        : record.artifact?.kind === "git" && normalizeRemote(record.artifact.remote) === normalizeRemote(remote) && clean(record.artifact.pluginPath) === clean(pluginPath),
     ) ?? null
   );
 }
 
 /** Records as they are on a ref (the registry's main), read with git so the fork's checkout is untouched. */
-export function recordsAtRef(registryDir: string, ref: string): { path: string; record: GitRecord }[] {
+export function recordsAtRef(registryDir: string, ref: string, log: (line: string) => void = () => {}): { path: string; record: GitRecord }[] {
   const files = runOrThrow("git", ["ls-tree", "-r", "--name-only", ref, "plugins/"], { cwd: registryDir })
     .split("\n")
     .filter((file) => /^plugins\/[^/]+\/[^/]+\.json$/.test(file));
   return files.flatMap((file) => {
     try {
       return [{ path: file, record: JSON.parse(runOrThrow("git", ["show", `${ref}:${file}`], { cwd: registryDir })) as GitRecord }];
-    } catch {
+    } catch (error) {
+      log(`warning: skipped ${file} on ${ref}: ${(error as Error).message.split("\n")[0]}`);
       return [];
     }
   });
@@ -107,8 +113,9 @@ export function registryUpdate(pluginDir: string, options: UpdateOptions): Updat
   const base = `${baseRemote}/main`;
   if (!hasUpstream) log(`note: no upstream remote in ${registry}; basing on origin/main (add: git remote add upstream https://github.com/${UPSTREAM_REGISTRY}.git)`);
 
-  const found = matchRecord(recordsAtRef(registry, base), remote, options.id);
-  if (!found) throw new Error(`no registry record for ${remote}${options.id ? ` (${options.id})` : ""} on ${base}: new listings go through the web form (ppd registry submit)`);
+  const pluginPath = gitLocation(dir)?.path ?? "";
+  const found = matchRecord(recordsAtRef(registry, base, log), remote, options.id, pluginPath);
+  if (!found) throw new Error(`no registry record for ${remote}${pluginPath ? ` path ${pluginPath}` : ""}${options.id ? ` (${options.id})` : ""} on ${base}: new listings go through the web form (ppd registry submit)`);
   const { record } = found;
   const path = join(registry, found.path);
   const plan: UpdatePlan = {

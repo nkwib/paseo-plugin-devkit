@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runChecks } from "../src/check/index.ts";
 import { daemonUp } from "../src/daemon.ts";
-import { installSource } from "../src/install.ts";
+import { installArgs, installSource } from "../src/install.ts";
 import { findPaseoBin } from "../src/paseo.ts";
 import { precheck } from "../src/registry/precheck.ts";
 import { HOME_MARKER } from "../src/safety.ts";
@@ -203,12 +203,14 @@ describe("plugins in a subdirectory of a repository", () => {
     return { repo, plugin };
   }
 
-  it.fails("installs --git from the repository root with a plugin path (a file:// URL of a subdirectory is not a Git repo)", () => {
+  it("installs --git from the repository root with a plugin path (a file:// URL of a subdirectory is not a Git repo)", () => {
     const { plugin } = repoWithSubPlugin();
     expect(installSource(plugin, true)).not.toMatch(/\/plugins\/hello$/);
+    expect(installArgs(plugin, true).slice(1)).toEqual(["--path", "plugins/hello"]);
+    expect(installArgs(plugin, false)).toEqual([plugin]);
   });
 
-  it.fails("prefills the submission form with the folder URL, not the repository root", () => {
+  it("prefills the submission form with the folder URL, not the repository root", () => {
     const { plugin } = repoWithSubPlugin();
     const result = ppd(["registry", "submit", plugin]);
     expect(decodeURIComponent(result.stdout)).toMatch(/github\.com\/acme\/monorepo\/tree\/[^/\s]+\/plugins\/hello/);

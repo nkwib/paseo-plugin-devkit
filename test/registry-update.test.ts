@@ -35,6 +35,16 @@ describe("record helpers", () => {
     expect(matchRecord(records, "git@github.com:acme/paseo-viewer.git")?.path).toBe("plugins/acme/viewer.json");
     expect(matchRecord(records, "x", "acme/viewer")).not.toBeNull();
     expect(matchRecord(records, "https://github.com/other/x")).toBeNull();
+  });
+
+  it("tells plugins of one monorepo apart by pluginPath", () => {
+    const record = (id: string, pluginPath?: string): { path: string; record: GitRecord } => ({
+      path: `plugins/${id}.json`,
+      record: { id, artifact: { kind: "git", remote: "https://github.com/acme/mono", commit: "c", ...(pluginPath ? { pluginPath } : {}) } },
+    });
+    const records = [record("acme/root"), record("acme/a", "plugins/a"), record("acme/b", "plugins/b")];
+    expect(matchRecord(records, "https://github.com/acme/mono", undefined, "plugins/b")?.record.id).toBe("acme/b");
+    expect(matchRecord(records, "https://github.com/acme/mono")?.record.id).toBe("acme/root");
     expect(branchName("acme/viewer", "v0.4.0")).toBe("update-acme-viewer-v0.4.0");
   });
 

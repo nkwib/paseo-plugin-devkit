@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { checkClient } from "./check/index.ts";
 import { requireDaemon, type DaemonRecord } from "./daemon.ts";
 import { runPaseo } from "./paseo.ts";
+import { gitLocation } from "./git.ts";
 import { run } from "./proc.ts";
 
 export interface InstallOptions {
@@ -35,8 +36,16 @@ export function readManifest(dir: string): { id: string; [key: string]: unknown 
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
+/** Directory installs use the path; Git installs use the repository root (a subdirectory is not a Git repository). */
 export function installSource(dir: string, git: boolean): string {
-  return git ? pathToFileURL(resolve(dir)).href : resolve(dir);
+  if (!git) return resolve(dir);
+  return pathToFileURL(gitLocation(dir)?.root ?? resolve(dir)).href;
+}
+
+/** `paseo plugin install` arguments: the source, plus --path for a plugin in a subdirectory of its repository. */
+export function installArgs(dir: string, git: boolean): string[] {
+  const sub = git ? gitLocation(dir)?.path : "";
+  return [installSource(dir, git), ...(sub ? ["--path", sub] : [])];
 }
 
 interface PluginEntry {
@@ -79,9 +88,10 @@ export async function installPlugin(dir: string, options: InstallOptions = {}): 
     const dirty = run("git", ["status", "--porcelain"], { cwd: resolve(dir) }).stdout.trim();
     if (dirty) log("note: Git mode installs the committed HEAD; uncommitted changes are not included");
   }
-  const source = installSource(dir, git);
+  const args = installArgs(dir, git);
+  const source = args[0]!;
   const local = relative(process.cwd(), source) || ".";
-  const shown = git || local.startsWith("..") ? source : local;
+  const shown = `${git || local.startsWith("..") ? source : local}${args[2] ? ` (path ${args[2]})` : ""}`;
   const existing = listedPlugin(daemon, id);
   let action: InstallResult["action"] = "installed";
   let step;
@@ -97,7 +107,7 @@ export async function installPlugin(dir: string, options: InstallOptions = {}): 
       if (removed.status !== 0) throw new Error(`could not remove the configured ${id}: ${(removed.stderr || removed.stdout).trim()}`);
     }
     log(`installing ${shown} as ${id} into ${daemon.url}`);
-    step = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "install", source, "--id", id, "--json"], { timeoutMs: 900_000 });
+    step = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "install", ...args, "--id", id, "--json"], { timeoutMs: 900_000 });
   }
   const entry = listedPlugin(daemon, id);
   const logs = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "logs", id], { timeoutMs: 60_000 }).stdout;
