@@ -10,7 +10,7 @@ import { join } from "node:path";
 const [plugins, ext, pluginDir, outDir] = process.argv.slice(2);
 const exit = process.exit.bind(process);
 mkdirSync(outDir, { recursive: true });
-const result = { stage: "load", handlers: [], registrations: [], evalMs: null, returnsCleanup: null };
+const result = { stage: "load", handlers: [], registrations: [], evalMs: null, returnsCleanup: null, cleanupError: null, leaks: [] };
 const save = (extra = {}) => writeFileSync(join(outDir, "result.json"), JSON.stringify({ ...result, ...extra }));
 const fail = (stage, error) => {
   save({ stage, error: error instanceof Error ? error.message : String(error) });
@@ -55,6 +55,7 @@ if (bundles.serverBundle) {
   process.exit = (code) => {
     throw new Error(`plugin code called process.exit(${code ?? ""})`);
   };
+  const baseline = process.getActiveResourcesInfo();
   try {
     const started = performance.now();
     const setup = host.evaluateBundle(bundles.serverBundle);
@@ -73,7 +74,21 @@ if (bundles.serverBundle) {
         },
       },
     );
-    result.returnsCleanup = typeof setup(server) === "function";
+    const cleanup = setup(server);
+    result.returnsCleanup = typeof cleanup === "function";
+    if (result.returnsCleanup) {
+      // Like a reload or disable: run the cleanup, then list handles it left open.
+      try {
+        await cleanup();
+      } catch (error) {
+        result.cleanupError = error instanceof Error ? error.message : String(error);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const counts = new Map();
+      for (const kind of process.getActiveResourcesInfo()) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+      for (const kind of baseline) counts.set(kind, (counts.get(kind) ?? 0) - 1);
+      result.leaks = [...counts].filter(([, count]) => count > 0).map(([kind, count]) => `${count} ${kind}`);
+    }
   } catch (error) {
     fail("evaluate", error);
   }

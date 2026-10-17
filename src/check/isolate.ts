@@ -17,10 +17,32 @@ export interface EvalRequest {
   icons: string[] | null;
 }
 
+interface CleanupReport {
+  /** The contribution's cleanup threw. */
+  cleanupError: string | null;
+  /** Handles still open after cleanup ("1 Timeout", "1 TCPServerWrap"): they keep a plugin process alive. */
+  leaks: string[];
+}
+
 export type WorkerResult =
-  | { target: "server"; handlers: string[]; registrations: string[]; evalMs: number; contractErrors: string[] }
-  | { target: "client"; contributions: string[]; icons: string[]; setupError: string | null; contractErrors: string[] }
+  | ({ target: "server"; handlers: string[]; registrations: string[]; evalMs: number; contractErrors: string[] } & CleanupReport)
+  | ({ target: "client"; contributions: string[]; icons: string[]; setupError: string | null; contractErrors: string[] } & CleanupReport)
   | { target: "server" | "client"; error: string };
+
+/** Active resource kinds (process.getActiveResourcesInfo) beyond a baseline, as "2 Timeout" strings. */
+export function leakedResources(before: string[], after: string[]): string[] {
+  const counts = new Map<string, number>();
+  for (const kind of after) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  for (const kind of before) counts.set(kind, (counts.get(kind) ?? 0) - 1);
+  return [...counts].filter(([, count]) => count > 0).map(([kind, count]) => `${count} ${kind}`);
+}
+
+/** Warning details for a cleanup that threw or left handles open, or null when it was clean. */
+export function cleanupWarning(report: CleanupReport): string | null {
+  if (report.cleanupError) return `cleanup threw: ${report.cleanupError}`;
+  if (report.leaks.length) return `after cleanup, still open: ${report.leaks.join(", ")} (a reload or disable leaks them; clear timers and close servers in the returned cleanup)`;
+  return null;
+}
 
 export interface ChildOutcome {
   /** Set when the child was killed after `timeoutMs`. */

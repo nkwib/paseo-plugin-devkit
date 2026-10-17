@@ -87,6 +87,8 @@ export interface ServerEvaluation {
   evalMs: number;
   /** Host rules the contribution broke (plugin-process.ts): it must return a cleanup function. */
   contractErrors: string[];
+  /** The cleanup the contribution returned. Paseo calls it on reload, disable and shutdown. */
+  cleanup: (() => unknown) | null;
 }
 
 /**
@@ -122,7 +124,7 @@ export function evaluateServerBundle(bundle: string, pluginDir: string, override
   );
   const cleanup = setup(server);
   const contractErrors = typeof cleanup === "function" ? [] : ["Plugin contribution must return a cleanup function"];
-  return { handlers, registrations, evalMs, contractErrors };
+  return { handlers, registrations, evalMs, contractErrors, cleanup: typeof cleanup === "function" ? (cleanup as () => unknown) : null };
 }
 
 export interface ClientContribution {
@@ -137,6 +139,8 @@ export interface ClientEvaluation {
   setupError: string | null;
   /** Registrations the app rejects (client-rules.ts). Any one of them hides the plugin's whole client. */
   contractErrors: string[];
+  /** The cleanup the contribution returned. The app calls it when the plugin unloads. */
+  cleanup: (() => unknown) | null;
 }
 
 export interface ClientEvaluationOptions {
@@ -191,11 +195,13 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, op
     },
   );
   let setupError: string | null = null;
+  let returned: unknown;
   const asyncErrors: string[] = [];
   const onRejection = (reason: unknown) => asyncErrors.push(String((reason as Error)?.message ?? reason));
   process.on("unhandledRejection", onRejection);
   try {
-    rules.finish(setup(client));
+    returned = setup(client);
+    rules.finish(returned);
     await new Promise((resolve) => setTimeout(resolve, options.settleMs ?? 50));
   } catch (error) {
     setupError = (error as Error).message;
@@ -208,6 +214,7 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, op
     icons: [...new Set(contributions.flatMap((entry) => contributionIcons(entry.contribution)))],
     setupError,
     contractErrors: rules.errors,
+    cleanup: typeof returned === "function" ? (returned as () => unknown) : null,
   };
 }
 

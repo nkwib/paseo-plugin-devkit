@@ -6,7 +6,7 @@ import { bundleRequires, disallowedClientRequires, disallowedServerRequires, for
 import { compileLikePaseo, compileWithPaseo, findEntries, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
-import { DEFAULT_EVAL_TIMEOUT_MS, evaluateIsolated } from "./isolate.ts";
+import { cleanupWarning, DEFAULT_EVAL_TIMEOUT_MS, evaluateIsolated } from "./isolate.ts";
 import { lucideIconNames, staticIconNames } from "./lucide.ts";
 import { UsageError } from "../usage.ts";
 
@@ -92,6 +92,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
   let realHandlers: string[] | null = null;
   let realEvalError: string | null = null;
   let realEvalMs: number | null = null;
+  let realCleanupWarning: string | null = null;
   if (paseoSource) {
     const real = await compileWithPaseo(dir, paseoSource, options.compileTimeoutMs);
     if (real.error && real.stage === "evaluate") {
@@ -108,6 +109,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       realHandlers = real.handlers;
       realEvalMs = real.evalMs;
       if (real.serverBundle && real.returnsCleanup === false) realEvalError = "Plugin contribution must return a cleanup function";
+      realCleanupWarning = cleanupWarning(real);
     }
   } else {
     add("paseo-compile", "skip", `real compiler not run: ${PASEO_SOURCE_MISSING}`);
@@ -142,7 +144,9 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
     if (realEvalError) {
       add("server-eval", "fail", `Paseo's evaluator failed on the server bundle: ${realEvalError}`);
     } else if (realHandlers) {
-      add("server-eval", "pass", `Paseo's evaluator ran the contribution in ${realEvalMs} ms; RPCs: ${realHandlers.join(", ") || "none"}`);
+      const summary = `Paseo's evaluator ran the contribution in ${realEvalMs} ms; RPCs: ${realHandlers.join(", ") || "none"}`;
+      if (realCleanupWarning) add("server-eval", "warn", realCleanupWarning, [summary]);
+      else add("server-eval", "pass", summary);
     } else if (serverOutcome && !serverOutcome.ok) {
       add("server-eval", "fail", `server bundle failed to evaluate: ${serverOutcome.error}`);
     } else if (serverOutcome?.ok) {
@@ -151,7 +155,12 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       else if (result.target === "server") {
         realEvalMs = result.evalMs;
         if (result.contractErrors.length) add("server-eval", "fail", `Paseo would stop this plugin: ${result.contractErrors.join("; ")}`);
-        else add("server-eval", "pass", `evaluated in ${result.evalMs} ms; RPCs: ${result.handlers.join(", ") || "none"}`);
+        else {
+          const summary = `evaluated in ${result.evalMs} ms; RPCs: ${result.handlers.join(", ") || "none"}`;
+          const leak = cleanupWarning(result);
+          if (leak) add("server-eval", "warn", leak, [summary]);
+          else add("server-eval", "pass", summary);
+        }
       }
     }
   }
@@ -168,6 +177,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
         const summary = `contributions: ${result.contributions.join(", ") || "none"}`;
         if (result.contractErrors.length) add("client-eval", "fail", "the app would reject this plugin client and show none of its UI", [...result.contractErrors, summary]);
         else if (result.setupError) add("client-eval", "warn", `contribution threw under stub host modules (may be a stub limit): ${result.setupError}`, [summary]);
+        else if (cleanupWarning(result)) add("client-eval", "warn", cleanupWarning(result)!, [summary]);
         else add("client-eval", "pass", summary);
       }
     }

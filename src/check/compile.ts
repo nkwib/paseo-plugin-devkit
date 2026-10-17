@@ -74,6 +74,10 @@ export interface PaseoCompileResult {
   evalMs: number | null;
   /** False when the server contribution did not return a cleanup function. Null when not evaluated. */
   returnsCleanup: boolean | null;
+  /** The server cleanup threw. */
+  cleanupError: string | null;
+  /** Handles the server contribution left open after its cleanup ran. */
+  leaks: string[];
 }
 
 const SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), "../../scripts/host-compile.mjs");
@@ -85,6 +89,8 @@ interface ScriptResult {
   registrations: string[];
   evalMs: number | null;
   returnsCleanup: boolean | null;
+  cleanupError?: string | null;
+  leaks?: string[];
 }
 
 /**
@@ -106,7 +112,7 @@ async function runHostCompile(command: string, args: string[], options: { cwd?: 
     const read = (name: string) => (existsSync(join(out, name)) ? readFileSync(join(out, name), "utf8") : null);
     const raw = read("result.json");
     const result: ScriptResult = raw ? JSON.parse(raw) : { stage: "load", handlers: [], registrations: [], evalMs: null, returnsCleanup: null };
-    const base = { clientBundle: read("client.js"), serverBundle: read("server.js"), handlers: result.handlers, registrations: result.registrations, evalMs: result.evalMs, returnsCleanup: result.returnsCleanup };
+    const base = { clientBundle: read("client.js"), serverBundle: read("server.js"), handlers: result.handlers, registrations: result.registrations, evalMs: result.evalMs, returnsCleanup: result.returnsCleanup, cleanupError: result.cleanupError ?? null, leaks: result.leaks ?? [] };
     if (result.stage === "done") return base;
     if (result.error) return { ...base, stage: result.stage as NonNullable<PaseoCompileResult["stage"]>, error: result.error };
     // No error recorded: the process was killed or exited mid-stage.

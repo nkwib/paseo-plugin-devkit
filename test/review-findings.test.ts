@@ -65,6 +65,19 @@ describe("ppd check runs plugin code in its own process", () => {
     expect(results.find((result) => result.id === "client-eval")).toMatchObject({ status: "fail", message: expect.stringMatching(/did not finish within 2 s/) });
   });
 
+  it("calls the cleanup and warns about a server left listening (probe-bridge: check hung on plugins that start a server)", async () => {
+    const dir = variant({
+      "index.server.ts": [
+        "server.handle(greetRpc, ({ name }) => greet(name));\n  return () => {};",
+        'server.handle(greetRpc, ({ name }) => greet(name));\n  const http = require("node:net").createServer().listen(0, "127.0.0.1");\n  const timer = setInterval(() => {}, 60_000);\n  return () => clearInterval(timer);',
+      ],
+    });
+    const result = ppd(["check", dir], 15_000);
+    expect(result.error).toBeUndefined();
+    expect(result.stdout).toMatch(/WARN\s+server-eval\s+after cleanup, still open: 1 TCPServerWrap/);
+    expect(result.stdout).not.toMatch(/Timeout/);
+  });
+
   it("fails a server contribution that returns no cleanup function (plugin-process.ts)", async () => {
     const dir = variant({ "index.server.ts": ["return () => {};", "return undefined as never;"] });
     expect((await byId(dir)).get("server-eval")).toMatchObject({ status: "fail", message: expect.stringContaining("cleanup") });

@@ -3,12 +3,26 @@
 // enforces the timeout and treats a missing result as a failure.
 //   node eval-worker.(ts|js) <request.json>
 import { readFileSync, writeFileSync } from "node:fs";
-import type { EvalRequest, WorkerResult } from "./isolate.ts";
+import { leakedResources, type EvalRequest, type WorkerResult } from "./isolate.ts";
 import { evaluateClientBundle, evaluateServerBundle } from "./bundle.ts";
 
 const request = JSON.parse(readFileSync(process.argv[2]!, "utf8")) as EvalRequest;
 const exit = process.exit.bind(process);
 const write = (result: WorkerResult) => writeFileSync(request.resultFile, JSON.stringify(result));
+const settle = () => new Promise((resolve) => setTimeout(resolve, 100));
+
+/** Calls the contribution's cleanup like Paseo does on reload or unload, then lists what is still open. */
+async function runCleanup(cleanup: (() => unknown) | null, baseline: string[]): Promise<{ cleanupError: string | null; leaks: string[] }> {
+  if (!cleanup) return { cleanupError: null, leaks: [] };
+  let cleanupError: string | null = null;
+  try {
+    await cleanup();
+  } catch (error) {
+    cleanupError = (error as Error).message ?? String(error);
+  }
+  await settle();
+  return { cleanupError, leaks: leakedResources(baseline, process.getActiveResourcesInfo()) };
+}
 
 // The host runs plugins in their own process; exiting it is never a pass. Throwing surfaces the call site.
 process.exit = ((code?: number) => {
@@ -16,6 +30,7 @@ process.exit = ((code?: number) => {
 }) as typeof process.exit;
 
 const bundle = readFileSync(request.bundleFile, "utf8");
+const baseline = process.getActiveResourcesInfo();
 let result: WorkerResult;
 try {
   if (request.target === "server") {
@@ -26,6 +41,7 @@ try {
       registrations: evaluation.registrations,
       evalMs: evaluation.evalMs,
       contractErrors: evaluation.contractErrors,
+      ...(await runCleanup(evaluation.cleanup, baseline)),
     };
   } else {
     const evaluation = await evaluateClientBundle(bundle, request.pluginDir, { icons: request.icons ? new Set(request.icons) : null });
@@ -35,6 +51,7 @@ try {
       icons: evaluation.icons,
       setupError: evaluation.setupError,
       contractErrors: evaluation.contractErrors,
+      ...(evaluation.setupError ? { cleanupError: null, leaks: [] } : await runCleanup(evaluation.cleanup, baseline)),
     };
   }
 } catch (error) {
