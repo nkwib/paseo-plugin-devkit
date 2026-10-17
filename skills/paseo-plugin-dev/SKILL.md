@@ -7,7 +7,7 @@ description: Verify, test, release and publish Paseo plugins safely. Use when bu
 
 The plugin API itself (contributions, RPCs, hooks, UI components) lives in Paseo's `public-docs/plugins/` and the upstream `paseo-plugin` skill. This skill covers what those leave out: verifying a plugin on real hosts without touching the user's Paseo, the runtime limits nobody documents, and shipping it.
 
-Tooling: the `ppd` CLI from `paseo-plugin-devkit` (`npx paseo-plugin-devkit <command>` or a global install). `ppd help` lists commands.
+Tooling: the `ppd` CLI from `paseo-plugin-devkit` (a devDependency, run as `npx ppd <command>`). `ppd --help` lists commands, `ppd <command> --help` shows options. `examples/hello-plugin` in the devkit repo is a minimal plugin that passes every check.
 
 ## Hard rules
 
