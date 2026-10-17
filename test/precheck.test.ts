@@ -16,12 +16,22 @@ describe("media and icon", () => {
     expect(mediaFindings(dir, { icon: "assets/icon.png", media: ["assets/screenshot.png", "https://example.com/demo.mp4"] }, null)).toEqual([]);
   });
 
-  it("rejects SVG, extensionless URLs, a video thumbnail, missing files and escaping paths", () => {
+  it("requires an image somewhere in media, not first (the thumbnail is the first image, PROTOCOL.md)", () => {
+    const dir = plugin();
+    expect(mediaFindings(dir, { media: ["https://example.com/demo.mp4"] }, null).map((f) => f.message)).toEqual(["media has no image: the card thumbnail is the first image entry"]);
+  });
+
+  it("reports malformed media instead of crashing", () => {
+    const dir = plugin();
+    expect(mediaFindings(dir, { media: "assets/screenshot.png" as never }, null).map((f) => f.message)).toEqual(["media must be a list of package paths or HTTPS URLs"]);
+    expect(mediaFindings(dir, { media: ["https://"] }, null).map((f) => f.message)).toContain("https://: not a valid URL");
+  });
+
+  it("rejects SVG, extensionless URLs, missing files and escaping paths", () => {
     const dir = plugin();
     const messages = mediaFindings(dir, { icon: "assets/icon.svg", media: ["https://example.com/demo.mp4", "assets/missing.png", "../outside.png", "https://example.com/image", "http://example.com/a.png"] }, { files: ["paseo-plugin.json"] }).map((f) => `${f.level} ${f.message}`);
     expect(messages).toEqual(
       expect.arrayContaining([
-        expect.stringMatching(/^error .*thumbnail/),
         expect.stringMatching(/^error assets\/missing.png: file does not exist/),
         expect.stringMatching(/^error \.\.\/outside.png: path leaves/),
         expect.stringMatching(/^error https:\/\/example.com\/image: extension/),

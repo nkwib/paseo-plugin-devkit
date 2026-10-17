@@ -37,19 +37,39 @@ interface PackageJson {
 /** Media rules from the publishing guide: package-relative paths or public HTTPS URLs with a known extension. */
 export function mediaFindings(pluginDir: string, manifest: Manifest, pkg: PackageJson | null): PrecheckFinding[] {
   const findings: PrecheckFinding[] = [];
-  const media = manifest.media ?? [];
-  media.forEach((entry, index) => {
-    const isUrl = /^[a-z]+:\/\//i.test(entry);
-    const ext = extname(isUrl ? new URL(entry).pathname : entry).toLowerCase();
-    const allowed = [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS];
-    if (!allowed.includes(ext)) findings.push({ level: "error", area: "media", message: `${entry}: extension must be one of ${allowed.join(" ")} (SVG and extensionless URLs are rejected)` });
-    if (index === 0 && !IMAGE_EXTENSIONS.includes(ext)) findings.push({ level: "error", area: "media", message: `${entry}: the first media entry is the card thumbnail and must be an image` });
-    if (isUrl) {
-      if (!entry.startsWith("https://")) findings.push({ level: "error", area: "media", message: `${entry}: media URLs must be HTTPS` });
-      return;
+  const allowed = [...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS];
+  const media: unknown = manifest.media ?? [];
+  if (!Array.isArray(media)) {
+    findings.push({ level: "error", area: "media", message: "media must be a list of package paths or HTTPS URLs" });
+  } else {
+    let images = 0;
+    for (const entry of media) {
+      if (typeof entry !== "string" || !entry) {
+        findings.push({ level: "error", area: "media", message: `${JSON.stringify(entry)}: media entries must be strings` });
+        continue;
+      }
+      const isUrl = /^[a-z]+:\/\//i.test(entry);
+      let path = entry;
+      if (isUrl) {
+        try {
+          path = new URL(entry).pathname;
+        } catch {
+          findings.push({ level: "error", area: "media", message: `${entry}: not a valid URL` });
+          continue;
+        }
+      }
+      const ext = extname(path).toLowerCase();
+      if (!allowed.includes(ext)) findings.push({ level: "error", area: "media", message: `${entry}: extension must be one of ${allowed.join(" ")} (SVG and extensionless URLs are rejected)` });
+      if (IMAGE_EXTENSIONS.includes(ext)) images++;
+      if (isUrl) {
+        if (!entry.startsWith("https://")) findings.push({ level: "error", area: "media", message: `${entry}: media URLs must be HTTPS` });
+        continue;
+      }
+      findings.push(...localAssetFindings(pluginDir, entry, "media", pkg));
     }
-    findings.push(...localAssetFindings(pluginDir, entry, "media", pkg));
-  });
+    // The card thumbnail is the first image entry, even when a video comes first (registry PROTOCOL.md).
+    if (media.length && !images) findings.push({ level: "error", area: "media", message: "media has no image: the card thumbnail is the first image entry" });
+  }
   if (manifest.icon) {
     if (extname(manifest.icon).toLowerCase() !== ".png") findings.push({ level: "error", area: "icon", message: `${manifest.icon}: the listing icon must be a PNG` });
     findings.push(...localAssetFindings(pluginDir, manifest.icon, "icon", pkg));
@@ -137,12 +157,22 @@ export function precheck(pluginDir: string): PrecheckFinding[] {
   const findings: PrecheckFinding[] = [];
   const manifestPath = join(dir, "paseo-plugin.json");
   if (!existsSync(manifestPath)) return [{ level: "error", area: "manifest", message: "no paseo-plugin.json" }];
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as Manifest;
-  const pkg = existsSync(join(dir, "package.json")) ? (JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as PackageJson) : null;
+  const parse = <T>(file: string): T | Error => {
+    try {
+      return JSON.parse(readFileSync(join(dir, file), "utf8")) as T;
+    } catch (error) {
+      return new Error(`${file} is not valid JSON: ${(error as Error).message}`);
+    }
+  };
+  const manifest = parse<Manifest>("paseo-plugin.json");
+  if (manifest instanceof Error || !manifest || typeof manifest !== "object") return [{ level: "error", area: "manifest", message: manifest instanceof Error ? manifest.message : "paseo-plugin.json must be a JSON object" }];
+  const parsedPkg = existsSync(join(dir, "package.json")) ? parse<PackageJson>("package.json") : null;
+  if (parsedPkg instanceof Error) return [{ level: "error", area: "package", message: parsedPkg.message }];
+  const pkg = parsedPkg;
 
   if (!manifest.description && !pkg?.description) findings.push({ level: "warn", area: "manifest", message: "no one-sentence description (manifest description for Git, package.json description for npm)" });
   if (!manifest.name) findings.push({ level: "warn", area: "manifest", message: "no display name: the listing humanizes the id" });
-  if (!manifest.media?.length) findings.push({ level: "warn", area: "media", message: "no media: visual plugins need at least one screenshot of the current interface" });
+  if (!Array.isArray(manifest.media) || !manifest.media.length) findings.push({ level: "warn", area: "media", message: "no media: visual plugins need at least one screenshot of the current interface" });
   if (!manifest.requirements?.paseo) findings.push({ level: "error", area: "manifest", message: "requirements.paseo is missing" });
   findings.push(...mediaFindings(dir, manifest, pkg));
   findings.push(...buildFindings(manifest, pkg, dir));

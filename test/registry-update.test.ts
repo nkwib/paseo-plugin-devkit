@@ -119,6 +119,16 @@ describe("registryUpdate against local repos", () => {
     expect(readFileSync(join(fork, "plugins/acme/viewer.json"), "utf8")).toContain("a".repeat(40));
   });
 
+  it("reruns cleanly when the branch already holds the update (after a failed push)", () => {
+    const { plugin, fork } = setup();
+    const first = registryUpdate(plugin, { registryDir: fork, log: () => {} });
+    const lines: string[] = [];
+    const again = registryUpdate(plugin, { registryDir: fork, log: (line) => lines.push(line) });
+    expect(again?.branch).toBe(first?.branch);
+    expect(lines.join("\n")).toMatch(/already has this update; reusing it/);
+    expect(git(fork, "rev-parse", "--abbrev-ref", "HEAD")).toBe("main");
+  });
+
   it("refuses an unpushed tag", () => {
     const { plugin, fork } = setup();
     git(plugin, "-c", "user.email=t@example.com", "-c", "user.name=T", "tag", "v0.5.0");

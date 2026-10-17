@@ -145,15 +145,15 @@ export default function contribute(client: PluginClientContext) {
 });
 
 describe("registry precheck robustness and drift", () => {
-  it.fails("reports a non-array media field instead of crashing", () => {
+  it("reports a non-array media field instead of crashing", () => {
     expect(() => precheck(manifestWith({ media: "assets/screenshot.png" }))).not.toThrow();
   });
 
-  it.fails("reports an unparsable media URL instead of crashing", () => {
+  it("reports an unparsable media URL instead of crashing", () => {
     expect(() => precheck(manifestWith({ media: ["https://"] }))).not.toThrow();
   });
 
-  it.fails("allows a video first: the card uses the first image entry (registry PROTOCOL.md 'even when a video comes first')", () => {
+  it("allows a video first: the card uses the first image entry (registry PROTOCOL.md 'even when a video comes first')", () => {
     const findings = precheck(manifestWith({ media: ["https://example.com/demo.mp4", "assets/screenshot.png"] }));
     expect(findings.filter((finding) => finding.area === "media" && finding.level === "error")).toEqual([]);
   });

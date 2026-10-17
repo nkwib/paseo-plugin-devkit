@@ -135,11 +135,20 @@ export function registryUpdate(pluginDir: string, options: UpdateOptions): Updat
   const head = runOrThrow("git", ["rev-parse", "HEAD"], { cwd: registry }).trim();
   const restore = () => run("git", branch ? ["switch", "--quiet", branch] : ["switch", "--quiet", "--detach", head], { cwd: registry });
   try {
-    runOrThrow("git", ["switch", "--quiet", "-c", plan.branch, base], { cwd: registry });
-    writeFileSync(path, `${JSON.stringify(updatedRecord(record, commit, tag), null, 2)}\n`);
-    runOrThrow("git", ["add", path], { cwd: registry });
-    runOrThrow("git", ["commit", "--quiet", "-m", `Update ${record.id} to ${tag}`], { cwd: registry });
-    log(`branch ${plan.branch}: ${record.id} ${plan.from.tag ?? plan.from.commit.slice(0, 7)} -> ${tag} (${commit.slice(0, 7)})`);
+    const content = `${JSON.stringify(updatedRecord(record, commit, tag), null, 2)}\n`;
+    if (run("git", ["rev-parse", "--verify", "--quiet", `refs/heads/${plan.branch}`], { cwd: registry }).status === 0) {
+      // A rerun (say, after a failed push): reuse the branch when it already holds this exact update.
+      const existing = run("git", ["show", `${plan.branch}:${found.path}`], { cwd: registry }).stdout;
+      if (existing !== content) throw new Error(`branch ${plan.branch} already exists with a different record: delete it (git -C ${registry} branch -D ${plan.branch}) and rerun`);
+      runOrThrow("git", ["switch", "--quiet", plan.branch], { cwd: registry });
+      log(`branch ${plan.branch} already has this update; reusing it`);
+    } else {
+      runOrThrow("git", ["switch", "--quiet", "-c", plan.branch, base], { cwd: registry });
+      writeFileSync(path, content);
+      runOrThrow("git", ["add", path], { cwd: registry });
+      runOrThrow("git", ["commit", "--quiet", "-m", `Update ${record.id} to ${tag}`], { cwd: registry });
+      log(`branch ${plan.branch}: ${record.id} ${plan.from.tag ?? plan.from.commit.slice(0, 7)} -> ${tag} (${commit.slice(0, 7)})`);
+    }
     const semver = /^v?\d+\.\d+\.\d+/;
     if (plan.from.tag && semver.test(plan.from.tag) && semver.test(tag) && compareVersions(tag.replace(/^v/, ""), plan.from.tag.replace(/^v/, "")) < 0) {
       log(`warning: ${tag} is older than the listed ${plan.from.tag}`);
