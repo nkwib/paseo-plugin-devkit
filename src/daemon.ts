@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { findPaseoBin, findWebDist, paseoVersion, runPaseo } from "./paseo.ts";
-import { isPidAlive, isPortFree, processCommand, run, sleep, waitFor, which } from "./proc.ts";
+import { isPidAlive, isPortFree, processCommand, sleep, waitFor, which } from "./proc.ts";
 import {
   assertSafeHome,
   assertSafePort,
@@ -182,17 +182,17 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
     writeDaemon(record);
   }
 
+  log(`dev daemon "${name}" up`);
+  log(`  url:   ${record.url}${webDist ? "" : " (no web UI build found: pass --web-dist)"}`);
+  log(`  home:  ${home}`);
+  log(`  pid:   ${record.pid}`);
+  log(`  paseo: ${record.paseoVersion ?? "unknown version"}`);
   if (options.workspace) {
     const result = runPaseo(paseoBin, home, ["workspace", "create", "--isolation", "local", "--path", options.workspace, "--json"]);
     if (result.status !== 0) log(`warning: could not create a workspace for ${options.workspace}: ${result.stderr.trim()}`);
     else log(`workspace created for ${options.workspace}`);
   }
 
-  log(`dev daemon "${name}" up`);
-  log(`  url:   ${record.url}${webDist ? "" : " (no web UI build found: pass --web-dist)"}`);
-  log(`  home:  ${home}`);
-  log(`  pid:   ${record.pid}`);
-  log(`  paseo: ${record.paseoVersion ?? "unknown version"}`);
   return record;
 }
 
@@ -285,6 +285,3 @@ export function requireDaemon(name = "default"): DaemonRecord {
   return record;
 }
 
-export function daemonLogTail(record: DaemonRecord, lines = 40): string {
-  return run("tail", ["-n", String(lines), join(record.home, "daemon.log")]).stdout;
-}

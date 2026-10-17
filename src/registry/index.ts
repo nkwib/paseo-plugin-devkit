@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { run } from "../proc.ts";
+import { UsageError } from "../usage.ts";
 import { precheck, type PrecheckFinding } from "./precheck.ts";
 import { normalizeRemote, registryUpdate, UPSTREAM_REGISTRY } from "./update.ts";
 
@@ -42,7 +43,7 @@ export async function registryCommand(args: string[]): Promise<number> {
     return findings.some((finding) => finding.level === "error") ? 1 : 0;
   }
   if (sub === "update") {
-    if (!values.registry) throw new Error("ppd registry update needs --registry <path to your getpaseo/plugins fork checkout>");
+    if (!values.registry) throw new UsageError("ppd registry update [dir] --registry <your getpaseo/plugins fork checkout>");
     const findings = precheck(dir).filter((finding) => finding.level === "error");
     if (findings.length) {
       console.log(formatFindings(findings));
@@ -64,5 +65,5 @@ Afterwards verify: the issue has the "submission" label and the bot opens a revi
     if (!existsSync(join(dir, "OVERVIEW.md"))) console.log("Tip: ship OVERVIEW.md beside paseo-plugin.json to own your listing page.");
     return errors.length ? 1 : 0;
   }
-  throw new Error("usage: ppd registry precheck|update|submit [dir]");
+  throw new UsageError("ppd registry precheck|update|submit [dir]");
 }

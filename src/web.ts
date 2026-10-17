@@ -2,11 +2,12 @@
 // Selectors use accessible names that the Paseo app ships (aria-labels and the Command Center
 // placeholder), so plugin tests do not rediscover them.
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Browser, Locator, Page } from "playwright-core";
 import { requireDaemon, type DaemonRecord } from "./daemon.ts";
 import { runPaseo } from "./paseo.ts";
+import { UsageError } from "./usage.ts";
 
 export interface Viewport {
   width: number;
@@ -188,6 +189,7 @@ export async function webCommand(args: string[]): Promise<number> {
     },
     strict: true,
   });
+  if (values.wait !== undefined && !/^\d+$/.test(values.wait)) throw new UsageError(`--wait must be milliseconds, got ${values.wait}`);
   const daemon = requireDaemon(values.name);
   if (!daemon.webDist) throw new Error("this dev daemon has no web UI: restart it with `ppd daemon up --web-dist <dir>`");
   const viewport = values.viewport ? parseViewport(values.viewport) : undefined;
@@ -209,7 +211,7 @@ export async function webCommand(args: string[]): Promise<number> {
     if (values.command) await web.runCommand(values.command);
     for (const label of values.click ?? []) await web.click(label);
     await web.page.waitForTimeout(values.wait ? Number(values.wait) : 1500);
-    if (values.shot) console.log(`screenshot: ${await web.shot(values.shot, values["full-page"])}`);
+    if (values.shot) console.log(`screenshot: ${relative(process.cwd(), await web.shot(values.shot, values["full-page"]))}`);
     if (values.headed && !values.shot) {
       console.log("browser open; press Ctrl+C to close");
       await new Promise<void>((resolveClose) => web.page.on("close", () => resolveClose()));

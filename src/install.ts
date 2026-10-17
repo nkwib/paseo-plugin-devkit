@@ -1,7 +1,7 @@
 // Install a plugin directory into the dev daemon, as a directory source or as a file:// Git source.
 // Git mode installs the committed HEAD, so it runs the manifest `build` exactly like a registry install.
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { requireDaemon } from "./daemon.ts";
 import { runPaseo } from "./paseo.ts";
@@ -47,7 +47,8 @@ export function installPlugin(dir: string, options: InstallOptions = {}): Instal
     if (dirty) log("note: Git mode installs the committed HEAD; uncommitted changes are not included");
   }
   const source = installSource(dir, Boolean(options.git));
-  log(`installing ${source} as ${id} into ${daemon.url}`);
+  const shown = options.git ? source : relative(process.cwd(), source) || ".";
+  log(`installing ${shown} as ${id} into ${daemon.url}`);
   const install = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "install", source, "--id", id, "--json"], { timeoutMs: 900_000 });
   const listed = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "ls", id, "--json"], { timeoutMs: 60_000 });
   let entry: ReturnType<typeof pluginEntry> = null;

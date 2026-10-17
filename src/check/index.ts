@@ -3,10 +3,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { bundleRequires, disallowedClientRequires, disallowedServerRequires, evaluateClientBundle, evaluateServerBundle, formatKb, sizeReport } from "./bundle.ts";
-import { compileLikePaseo, compileWithPaseo, findEntries, findPaseoSource, PASEO_SOURCE_MISSING } from "./compile.ts";
+import { compileLikePaseo, compileWithPaseo, findEntries, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
 import { lucideIconNames, staticIconNames } from "./lucide.ts";
+import { UsageError } from "../usage.ts";
 
 export type Status = "pass" | "warn" | "fail" | "skip";
 
@@ -230,11 +231,19 @@ export async function checkCommand(args: string[]): Promise<number> {
   });
   const explicit = values["paseo-source"];
   const paseoSource = explicit ? findPaseoSource(explicit) : findPaseoSource();
-  if (explicit && !paseoSource) throw new Error(`${explicit} is not a usable Paseo checkout (needs ${"packages/server/src/server/plugins/compiler.ts"} and node_modules)`);
+  if (explicit && !paseoSource) throw new Error(`${explicit} is not a usable Paseo checkout: it needs ${PASEO_COMPILER} and node_modules (run npm ci there)`);
+  const kib = (flag: "max-client-kb" | "max-server-kb") => {
+    const value = values[flag];
+    if (value === undefined) return undefined;
+    if (!/^\d+$/.test(value)) throw new UsageError(`--${flag} must be a whole number of KiB, got ${value}`);
+    return Number(value) * 1024;
+  };
+  const maxClientBytes = kib("max-client-kb");
+  const maxServerBytes = kib("max-server-kb");
   const results = await runChecks(positionals[0] ?? ".", {
     paseoSource,
-    ...(values["max-client-kb"] ? { maxClientBytes: Number(values["max-client-kb"]) * 1024 } : {}),
-    ...(values["max-server-kb"] ? { maxServerBytes: Number(values["max-server-kb"]) * 1024 } : {}),
+    ...(maxClientBytes !== undefined ? { maxClientBytes } : {}),
+    ...(maxServerBytes !== undefined ? { maxServerBytes } : {}),
   });
   console.log(values.json ? JSON.stringify(results, null, 2) : formatResults(results));
   return results.some((result) => result.status === "fail") ? 1 : 0;

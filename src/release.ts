@@ -8,8 +8,7 @@ import { parseArgs } from "node:util";
 import { run, runOrThrow } from "./proc.ts";
 import { precheck } from "./registry/precheck.ts";
 import { shellJoin } from "./registry/update.ts";
-
-export type Bump = "patch" | "minor" | "major";
+import { UsageError } from "./usage.ts";
 
 const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-[\w.]+)?$/;
 
@@ -93,7 +92,7 @@ export async function releaseCommand(args: string[]): Promise<number> {
     strict: true,
   });
   const request = positionals[0];
-  if (!request) throw new Error("usage: ppd release <patch|minor|major|X.Y.Z> [--dry-run] [--yes]");
+  if (!request) throw new UsageError("ppd release <patch|minor|major|X.Y.Z> [--dry-run] [--yes]");
   const dir = resolve(values.dir ?? ".");
   const dry = Boolean(values["dry-run"]);
   if (!dry && !values.yes && !process.stdin.isTTY) {

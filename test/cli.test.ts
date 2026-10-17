@@ -17,8 +17,33 @@ describe("ppd CLI guards", () => {
     expect(ppd("paseo", "--", "plugin", "ls").stderr).toMatch(/no running dev daemon/);
   });
 
+  it("refuses port 6767 for android reverse", () => {
+    const result = ppd("android", "up", "--port", "6767");
+    expect(result.status).toBe(3);
+    expect(result.stderr).toMatch(/refusing port 6767/);
+  });
+
   it("prints help and rejects unknown commands", () => {
-    expect(ppd("help").stdout).toMatch(/never port 6767, never ~\/.paseo/);
-    expect(ppd("frobnicate").status).toBe(1);
+    expect(ppd("--help").stdout).toMatch(/never port 6767, never ~\/.paseo/);
+    const unknown = ppd("frobnicate");
+    expect(unknown.status).toBe(1);
+    expect(unknown.stderr).toMatch(/unknown command: frobnicate\nrun `ppd --help`/);
+  });
+
+  it("prints per-command help without running the command", () => {
+    for (const command of ["daemon", "install", "paseo", "web", "android", "doctor", "check", "release", "registry"]) {
+      const viaFlag = ppd(command, "--help");
+      expect(viaFlag.status, command).toBe(0);
+      expect(viaFlag.stdout, command).toMatch(new RegExp(`^ppd ${command}`));
+      expect(ppd("help", command).stdout).toBe(viaFlag.stdout);
+    }
+    expect(ppd("daemon", "up", "-h").stdout).toMatch(/--workspace DIR/);
+  });
+
+  it("points bad options and values at the command's help", () => {
+    const unknown = ppd("check", "--frob");
+    expect(unknown.status).toBe(1);
+    expect(unknown.stderr).toMatch(/Unknown option '--frob'[\s\S]*run `ppd check --help`/);
+    expect(ppd("check", "--max-client-kb", "lots").stderr).toMatch(/--max-client-kb must be a whole number of KiB/);
   });
 });

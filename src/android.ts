@@ -6,6 +6,8 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { requireDaemon } from "./daemon.ts";
 import { run, which } from "./proc.ts";
+import { parsePort } from "./safety.ts";
+import { UsageError } from "./usage.ts";
 
 export const PASEO_ANDROID_PACKAGE = "sh.paseo";
 
@@ -113,12 +115,13 @@ export async function androidCommand(args: string[]): Promise<number> {
     options: { serial: { type: "string" }, name: { type: "string" }, port: { type: "string" } },
     strict: true,
   });
-  if (sub !== "up" && sub !== "down" && sub !== "status") throw new Error("usage: ppd android up|down|status [--serial S]");
+  if (sub !== "up" && sub !== "down" && sub !== "status") throw new UsageError("ppd android up|down|status [--serial S] [--name N]");
+  const explicitPort = values.port ? parsePort(values.port) : undefined;
   const bin = findAdb();
   if (!bin) throw new Error("adb not found: install Android platform-tools or set PPD_ADB");
   const devices = parseAdbDevices(run(bin, ["devices", "-l"], { timeout: 30_000 }).stdout);
   const device = selectDevice(devices, values.serial);
-  const port = values.port ? Number(values.port) : requireDaemon(values.name).port;
+  const port = explicitPort ?? requireDaemon(values.name).port;
   const spec = `tcp:${port}`;
   console.log(`device: ${device.serial} ${device.description}`.trim());
 

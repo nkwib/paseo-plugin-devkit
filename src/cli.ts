@@ -1,37 +1,124 @@
 #!/usr/bin/env node
-// ppd: the Paseo plugin dev kit CLI. Run `ppd help` for commands.
+// ppd: the Paseo plugin dev kit CLI. Run `ppd --help` for commands.
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { resolve } from "node:path";
 import { daemonDown, daemonStatus, daemonUp, listDaemons, requireDaemon } from "./daemon.ts";
 import { installPlugin } from "./install.ts";
 import { runPaseo } from "./paseo.ts";
 import { parsePort, SafetyError } from "./safety.ts";
+import { UsageError } from "./usage.ts";
 
 const HELP = `ppd: dev kit for Paseo plugin authors
 
 Usage: ppd <command> [options]
+       ppd <command> --help      options for one command
 
 Dev daemon (isolated: temp home, never port 6767, never ~/.paseo)
-  daemon up [--port N] [--name N] [--web-dist DIR] [--workspace DIR] [--caffeinate] [--paseo BIN]
-  daemon down [--name N] [--keep-home]
-  daemon status [--name N] [--json]
-  install <dir> [--git] [--id ID] [--name N]   install a plugin into the dev daemon
-  paseo -- <args...>                          run the Paseo CLI against the dev daemon
-  web [--shot FILE] [--viewport WxH] [--path /route] [--workspace ID]
-      [--command TEXT] [--click LABEL]... [--wait MS] [--full-page] [--headed] [--name N]
-  android up|down|status [--serial S] [--name N]  adb reverse to the dev daemon (read-only device checks)
-  doctor [--json]                             toolchain report
+  daemon up|down|status   start, stop or inspect an isolated dev daemon
+  install <dir>           install a plugin into the dev daemon
+  paseo -- <args...>      run the Paseo CLI against the dev daemon
+  web                     open the web UI in Chrome, screenshot, click through
+  android up|down|status  adb reverse to the dev daemon (read-only device checks)
+  doctor                  toolchain report
 
 Host contract
-  check [dir] [--json] [--paseo-source DIR] [--max-client-kb N] [--max-server-kb N]
+  check [dir]             compile, evaluate and lint a plugin against the host contract
 
 Release and registry (user-run)
-  release <patch|minor|major|X.Y.Z> [--dry-run] [--yes]
-  registry precheck [dir] [--json]
-  registry update [dir] --registry DIR [--tag vX.Y.Z] [--id owner/slug] [--yes]
-  registry submit [dir]                       print the prefilled submission form URL
+  release <bump>          bump, changelog, tag, push, GitHub release
+  registry <sub>          precheck, update or submit a registry listing
 
 Docs: https://github.com/nkwib/paseo-plugin-devkit`;
+
+const COMMAND_HELP: Record<string, string> = {
+  daemon: `ppd daemon up [--port N] [--name N] [--workspace DIR] [--web-dist DIR] [--caffeinate] [--paseo BIN]
+ppd daemon down [--name N] [--keep-home]
+ppd daemon status [--name N] [--json] [--all]
+
+Starts a detached Paseo daemon in a fresh temp home on a free port (7800-7899), with plugins and the web
+UI on and relay, MCP and speech off. State lives in ~/.local/state/paseo-plugin-devkit (PPD_STATE_DIR).
+
+  --port N         port to listen on (6767 is refused)
+  --name N         run several daemons side by side (default: "default")
+  --workspace DIR  create a workspace for DIR after startup
+  --web-dist DIR   Paseo web UI build (default: the desktop app's app-dist)
+  --caffeinate     keep a Mac awake while the daemon runs
+  --paseo BIN      Paseo CLI to use (default: PASEO_BIN, PATH, the desktop app)
+  --keep-home      down: keep the temp home for inspection
+  --all            status: list every recorded daemon`,
+  install: `ppd install <dir> [--git] [--id ID] [--name N]
+
+Installs a plugin into the dev daemon and prints its status and logs. Exits 1 unless the plugin is running.
+
+  --git     install the committed HEAD through the manifest build, like a registry install
+  --id ID   plugin id to install as (default: manifest id, plus "-git" with --git)
+  --name N  target dev daemon`,
+  paseo: `ppd paseo [--name N] -- <args...>
+
+Runs the Paseo CLI against the dev daemon. --home is always appended; --home and --host are refused.
+Example: ppd paseo -- plugin logs hello-plugin`,
+  web: `ppd web [--shot FILE] [--viewport WxH] [--command TEXT] [--click LABEL]... [options]
+
+Opens the dev daemon's web UI in Chrome (Playwright), opens the only workspace (or --workspace), runs the
+steps in order and prints console errors.
+
+  --shot FILE         save a screenshot
+  --viewport WxH      e.g. 390x844; widths under 768 get the compact (phone) layout with touch
+  --command TEXT      select a Command Center item by its exact title
+  --click LABEL       click an element by its accessible name (repeatable)
+  --workspace ID      workspace id, name or path
+  --path /route       open an app route instead of a workspace
+  --wait MS           settle time before the screenshot (default 1500)
+  --full-page         full-page screenshot
+  --headed            show the browser
+  --name N            target dev daemon`,
+  android: `ppd android up|down|status [--serial S] [--name N] [--port N]
+
+up: adb reverse tcp:<port> so a phone running the Paseo app reaches the dev daemon as localhost:<port>.
+down: removes the reverse rule. status: device state (screen, lock, foreground app) and reverse rules.
+Never sends input or key events and never changes settings. Refuses to guess between several devices.
+
+  --serial S  device serial (required when several are attached)
+  --name N    dev daemon whose port to reverse
+  --port N    reverse this port instead of a dev daemon's (6767 is refused)`,
+  doctor: `ppd doctor [--json]
+
+Reports Node, the Paseo CLI, the web UI build, PASEO_SOURCE, a browser, Hermes, adb, Xcode, git, gh, free
+disk and running dev daemons. Read-only. Exits 1 only when something required is missing.`,
+  check: `ppd check [dir] [--json] [--paseo-source DIR] [--max-client-kb N] [--max-server-kb N]
+
+Host-contract checks on the plugin in dir (default: cwd): manifest, import boundaries, dependencies,
+compile, server and client evaluation, Hermes, Lucide icon names, bundle size. Exits 1 on any FAIL.
+
+  --paseo-source DIR  Paseo checkout with node_modules (default: PASEO_SOURCE) for the real compiler
+  --max-client-kb N   client bundle budget (default 2048)
+  --max-server-kb N   server bundle budget (default 32768)
+  --json              machine-readable results`,
+  release: `ppd release <patch|minor|major|X.Y.Z> [--dry-run] [--yes] [--dir DIR] [--skip-precheck]
+
+Bumps package.json, writes a CHANGELOG.md section (from commits if missing), commits, tags, pushes and
+creates a GitHub release. Refuses without a TTY unless --yes.
+
+  --dry-run        print the plan and commands, change nothing
+  --yes            skip the confirmation prompt
+  --dir DIR        plugin directory (default: cwd)
+  --skip-precheck  do not block on registry precheck errors`,
+  registry: `ppd registry precheck [dir] [--json]
+ppd registry update [dir] --registry DIR [--tag vX.Y.Z] [--id owner/slug] [--yes]
+ppd registry submit [dir]
+
+precheck  what the registry reviewer would bounce: OVERVIEW.md lint, media and icon, lockfile, build,
+          listing files committed. Exits 1 on errors.
+update    record-edit branch in your getpaseo/plugins fork for a Git release, runs the registry validator,
+          prints push and PR commands (--yes runs them).
+submit    prints the prefilled submission form URL. Submit it in a browser: CLI-created issues miss the
+          submission label.`,
+};
+
+function wantsHelp(args: string[]): boolean {
+  const separator = args.indexOf("--");
+  return (separator === -1 ? args : args.slice(0, separator)).some((arg) => arg === "--help" || arg === "-h");
+}
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
 
@@ -43,19 +130,25 @@ const name = { name: { type: "string" } } as const;
 
 async function main(argv: string[]): Promise<number> {
   const [command, ...rest] = argv;
+  if (command && COMMAND_HELP[command] && wantsHelp(rest)) {
+    console.log(COMMAND_HELP[command]);
+    return 0;
+  }
   switch (command) {
     case undefined:
     case "help":
     case "--help":
-    case "-h":
-      console.log(HELP);
+    case "-h": {
+      const topic = rest[0];
+      console.log(topic && COMMAND_HELP[topic] ? COMMAND_HELP[topic] : HELP);
       return 0;
+    }
     case "daemon":
       return daemon(rest);
     case "install": {
       const { values, positionals } = parse(rest, { ...name, git: { type: "boolean" }, id: { type: "string" } });
       const dir = positionals[0];
-      if (!dir) throw new UsageError("ppd install <dir>");
+      if (!dir) throw new UsageError("ppd install <dir> [--git] [--id ID] [--name N]");
       const result = installPlugin(resolve(dir), { name: values.name, id: values.id, git: values.git });
       console.log(`${result.id}: ${result.status}${result.error ? `\n${result.error}` : ""}`);
       if (result.logs.trim()) console.log(`--- plugin logs\n${result.logs.trim()}`);
@@ -150,18 +243,17 @@ async function daemon(args: string[]): Promise<number> {
   throw new UsageError("ppd daemon up|down|status");
 }
 
-class UsageError extends Error {}
-
 main(process.argv.slice(2)).then(
   (code) => {
     process.exitCode = code;
   },
-  (error: Error) => {
-    if (error instanceof UsageError) console.error(`usage: ${error.message}\nrun \`ppd help\` for commands`);
+  (error: Error & { code?: string }) => {
+    const command = process.argv[2];
+    const helpHint = command && COMMAND_HELP[command] ? `ppd ${command} --help` : "ppd --help";
+    if (error instanceof UsageError) console.error(`${error.message.startsWith("ppd ") ? "usage: " : ""}${error.message}\nrun \`${helpHint}\` for details`);
+    else if (error.code?.startsWith("ERR_PARSE_ARGS")) console.error(`${error.message.split(". ")[0]}\nrun \`${helpHint}\` for options`);
     else if (error instanceof SafetyError) console.error(`refused: ${error.message}`);
     else console.error(error.message);
     process.exitCode = error instanceof SafetyError ? 3 : 1;
   },
 );
-
-export { UsageError };
