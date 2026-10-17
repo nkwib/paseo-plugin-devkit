@@ -26,7 +26,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       # Approximate compile, eval, imports, Hermes parse/VM, bundle size.
-      # Real-compiler and Lucide checks skip without PASEO_SOURCE.
+      # No Paseo app on Linux runners: compile and eval run as a labeled APPROXIMATION here; the weekly job below uses the real compiler.
       - run: npx ppd check
       - run: npx ppd registry precheck
 

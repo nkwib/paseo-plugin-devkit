@@ -29,6 +29,7 @@ Then every CLI call targets that home: `paseo plugin install /abs/plugin --home 
 
 - Without `"pluginsEnabled": true` installed plugins load as disabled, with no error.
 - Speech features download local models (hundreds of MB) into the temp home unless dictation and voice mode are off.
+- Inside a Paseo agent the shell inherits `PASEO_HOME`, `PASEO_AGENT_ID`, `PASEO_CLI` and friends, which point at the user's daemon. Unset every inherited `PASEO_*` variable before starting the dev daemon or calling `paseo` (`ppd` does this for you).
 - `paseo` rejects `--home` together with `--host`. Use `--home` for local dev daemons.
 - Start the daemon with `nohup ... &` and a pidfile, never as a long-running background tool call: harness limits (30 min, 2 h) kill it mid-run.
 - Stop it with `kill "$(cat "$HOME_DIR/ppd.pid")"` after checking `ps -o command= -p <pid>` contains `--home $HOME_DIR`, then remove `$HOME_DIR`. Never `pkill paseo`: that matches the user's daemon too.

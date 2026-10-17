@@ -36,7 +36,7 @@ const COMMAND_HELP: Record<string, string> = {
 ppd daemon down [--name N] [--keep-home]
 ppd daemon status [--name N] [--json] [--all]
 
-Starts a detached Paseo daemon in a fresh temp home on a free port (7800-7899), with plugins and the web
+Starts a detached Paseo daemon in a fresh home under $TMPDIR on a free port (7800-7899), with plugins and the web
 UI on and relay, MCP and speech off. State lives in ~/.local/state/paseo-plugin-devkit (PPD_STATE_DIR).
 
   --port N         port to listen on (6767 is refused)

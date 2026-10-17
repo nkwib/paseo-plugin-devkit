@@ -26,12 +26,12 @@ git clone https://github.com/nkwib/paseo-plugin-devkit.git
 cd paseo-plugin-devkit
 npm ci                                   # installs and builds
 npx ppd doctor                           # what is installed, what is missing
-npx ppd check examples/hello-plugin      # host-contract checks, no Paseo needed
+npx ppd check examples/hello-plugin      # host-contract checks with the installed Paseo app's compiler
 npx ppd registry precheck examples/hello-plugin
 
 # needs the Paseo CLI:
 npx ppd daemon up --workspace /tmp/demo-workspace
-npx ppd install examples/hello-plugin
+npx ppd install examples/hello-plugin    # rerun after edits, or: npx ppd dev examples/hello-plugin
 npx ppd web --command "Open Hello panel" --click Greet --shot out/hello.png
 npx ppd daemon down
 ```
@@ -43,30 +43,29 @@ npm install -D github:nkwib/paseo-plugin-devkit   # the repo is private for now:
 npx ppd check                                     # plugin in cwd
 ```
 
-Point `PASEO_SOURCE` at a [getpaseo/paseo](https://github.com/getpaseo/paseo) checkout (with `npm ci` done) to compile with Paseo's real compiler and check icon names against the app's Lucide set.
+`ppd check` compiles and evaluates with the installed Paseo app's own compiler and evaluator, and checks icon names against the app's Lucide set (both read from `Paseo.app/Contents/Resources/app.asar`). Order: `PASEO_SOURCE` (a [getpaseo/paseo](https://github.com/getpaseo/paseo) checkout with `npm ci` done, to test against unreleased Paseo), then the app (`--paseo-app`, `PASEO_APP`, the app behind `paseo` on PATH, `/Applications/Paseo.app`), then an esbuild replica. Replica results are labeled `APPROXIMATION`; `--approx` forces it.
 
 ## Demo
 
-Real output from the commands above (temp path and one long line shortened):
+Real output from the commands above (temp path shortened):
 
 ```console
 $ npx ppd check examples/hello-plugin
 PASS  manifest         hello-plugin, requires paseo >=0.11.2
 PASS  imports          client, server and shared boundaries hold
 PASS  dependencies     no runtime packages
-SKIP  paseo-compile    real compiler not run: set PASEO_SOURCE to a getpaseo/paseo checkout with node_modules installed to compile with Paseo's real compiler
-PASS  approx-compile   esbuild with Paseo's build options compiled both entries
+PASS  paseo-compile    compilePlugin of the Paseo 0.11.4 app (/Applications/Paseo.app) accepted the plugin
 PASS  client-requires  client requires only host modules (@getpaseo/plugin, @getpaseo/plugin/client, react, react-native, react/jsx-runtime, zod)
 PASS  server-requires  server requires only host modules and Node built-ins
-PASS  server-eval      evaluated in 0 ms; RPCs: hello.greet
+PASS  server-eval      Paseo's evaluator ran the contribution in 0 ms; RPCs: hello.greet
 PASS  client-eval      contributions: addWorkspacePanel, addCommandCenterItem
 PASS  hermes-class     no class syntax in the client bundle
 SKIP  hermes-parse     hermesc not found (install react-native as a devDependency, or set HERMESC)
 SKIP  hermes-vm        Hermes VM not found (react-native ships it for macOS; or set HERMES)
-SKIP  lucide-icons     no lucide-react-native type list (set PASEO_SOURCE to ...); icons seen: Hand, MessageCircle
-PASS  bundle-size      client 4 KiB (2 KiB gzip), budget 2.0 MiB; server 2 KiB (1 KiB gzip), eval 0 ms, budget 32.0 MiB
+PASS  lucide-icons     2 icon name(s) valid against 6354 Lucide icons of the Paseo 0.11.4 app (/Applications/Paseo.app)
+PASS  bundle-size      client 5 KiB (2 KiB gzip), budget 2.0 MiB; server 2 KiB (1 KiB gzip), eval 0 ms, budget 32.0 MiB
 
-10 passed, 0 warnings, 0 failed, 4 skipped
+11 passed, 0 warnings, 0 failed, 2 skipped
 
 $ npx ppd daemon up --workspace /tmp/demo-workspace
 dev daemon "default" up
@@ -76,9 +75,10 @@ dev daemon "default" up
   paseo: 0.11.4
 workspace created for /tmp/demo-workspace
 
-$ npx ppd install examples/hello-plugin
+$ npx ppd install examples/hello-plugin    # rerun after edits, or: npx ppd dev examples/hello-plugin
 installing examples/hello-plugin as hello-plugin into http://127.0.0.1:7800
-hello-plugin: running
+hello-plugin: running (installed)
+client: passes the app's registration rules
 --- plugin logs
 TIME                      STREAM    MESSAGE
 2026-10-17T18:11:21.230Z  stdout    [paseo] Loading plugin
@@ -88,6 +88,7 @@ $ npx ppd web --command "Open Hello panel" --click Greet --shot out/hello.png
 opened workspace demo-workspace (wks_ef7618d24d59ccb1)
 screenshot: out/hello.png
 console errors: none
+plugin evaluation errors: none
 
 $ npx ppd daemon down
 stopped dev daemon "default" (pid 51399)
@@ -104,29 +105,30 @@ Every command has `ppd <command> --help`.
 
 | Command | What it does |
 | --- | --- |
-| `ppd doctor` | Node, Paseo CLI and version, web UI build, Paseo checkout, browser, Hermes, adb, Xcode, gh, disk, running dev daemons. |
-| `ppd daemon up` | Detached daemon in a fresh temp home on a free port (7800-7899): plugins and web UI on; relay, MCP and speech off. `--workspace DIR`, `--port`, `--name`, `--caffeinate`. |
+| `ppd doctor` | Node, Paseo CLI and version, web UI build, check compiler (app or checkout), browser, Hermes, adb, Xcode, gh, disk, running dev daemons. |
+| `ppd daemon up` | Detached daemon in a fresh home under `$TMPDIR` on a free port (7800-7899): plugins and web UI on; relay, MCP and speech off. `--workspace DIR`, `--port`, `--name`, `--caffeinate`. |
 | `ppd daemon down` / `status` | Stops the daemon and removes its home / shows it with installed plugins. |
-| `ppd install <dir>` | Installs a plugin into the dev daemon, prints `running` or the logs. `--git` installs committed HEAD through the manifest `build`, like a registry install. |
+| `ppd install [dir]` | Installs a plugin into the dev daemon, or reloads (same directory) or replaces an installed one, so rerun it after edits. Checks the client against the app's registration rules: an unknown icon or bad id makes the app drop the whole client with only a console warning, so `ppd install` reports `client-rejected` and exits 1. `--git` installs committed HEAD through the manifest `build`, like a registry install; a plugin in a repo subfolder is installed with `--path`. |
+| `ppd dev [dir]` | Installs, then watches: every change reloads the plugin (`paseo plugin reload`), re-checks the client and prints the result; plugin log lines stream as they appear. |
 | `ppd paseo -- <args>` | Any Paseo CLI call against the dev daemon, e.g. `plugin reload <id>`, `plugin logs <id>`. |
-| `ppd web` | Web UI in Chrome via Playwright: opens the workspace, prints console errors. `--shot`, `--viewport 390x844`, `--command "<Command Center item>"`, `--click "<aria label>"`, `--headed`. |
+| `ppd web` | Web UI in Chrome via Playwright: opens the workspace, prints console errors and plugin clients the app failed to evaluate (exit 1 if any). `--shot`, `--viewport 390x844`, `--command "<Command Center item>"`, `--click "<aria label>"`, `--headed`. |
 | `ppd android up\|down\|status` | `adb reverse` to the dev daemon for a phone running the Paseo app. Read-only device checks (lock, screen, foreground app). |
-| `ppd check [dir]` | Host-contract checks, below. `--json`, `--paseo-source`, `--max-client-kb`, `--max-server-kb`. |
+| `ppd check [dir]` | Host-contract checks, below. `--json`, `--paseo-app`, `--paseo-source`, `--approx`, `--max-client-kb`, `--max-server-kb`. |
 | `ppd registry precheck` | OVERVIEW.md lint, media and icon paths, lockfile sync, `build` sanity, listing files committed. |
-| `ppd registry submit` | Prints the prefilled registry form URL and what to verify after. |
+| `ppd registry submit` | Prints the prefilled registry form URL (a `tree/<ref>/<path>` URL for a plugin in a repo subfolder) and what to verify after. |
 | `ppd registry update --registry <fork>` | Record-edit branch for a Git release in your registry fork, runs the validator, prints push and PR commands. `--yes` runs them. |
-| `ppd release <patch\|minor\|major\|X.Y.Z>` | Version bump, changelog section, commit, tag, push, GitHub release. `--dry-run` prints the commands. |
+| `ppd release <patch\|minor\|major\|X.Y.Z>` | Checks the remote first (origin exists, tag not on origin, `git push --dry-run` passes), then bumps, writes the changelog section, commits, tags, pushes and creates the GitHub release. Rerun after a failed push resumes from the push. `--dry-run` prints the commands. |
 
 ### What `ppd check` verifies
 
 | Check | How |
 | --- | --- |
-| Compile | Paseo's own `compilePlugin` when `PASEO_SOURCE` is set, otherwise an esbuild replica of its settings. |
+| Compile | Paseo's own `compilePlugin`, from the installed app or `PASEO_SOURCE`; an esbuild replica (labeled `APPROXIMATION`) only when neither is found. Compile errors carry file:line:col. |
 | Client modules | Bundle requires only host-provided modules; no gesture handler, reanimated, safe-area or Lucide imports. |
-| Server bundle | Requires only host modules and Node built-ins; evaluated like Paseo does (with its evaluator when available); registered RPCs listed. |
-| Client eval | Factory runs against stub host modules; contributions recorded. |
+| Server bundle | Requires only host modules and Node built-ins; evaluated in a child process with Paseo's evaluator and a 30 s timeout (Paseo's init timeout); registered RPCs listed; the returned cleanup is called and handles it leaves open (servers, timers) are warnings. A `process.exit` or a hang fails. |
+| Client eval | Factory runs in a child process against stub host modules, with the app's registration rules: ids, contexts, callbacks, duplicates, icons, cleanup. Any violation fails, because the app then drops the whole client. |
 | Hermes | No class syntax; `hermesc` parse and a smoke run in the Hermes VM when the binaries are found. |
-| Icons | Every static contribution icon exists in the app's Lucide set. |
+| Icons | Every contribution icon exists in the app's Lucide set (read from the app bundle). |
 | Size, deps, boundaries | Bundle sizes, runtime deps in `dependencies`, client/server import boundaries, `@types/node` range. |
 
 ### In your test suite
@@ -151,7 +153,8 @@ await assertWithinRpcBudget(() => handlers.get("doc.render")!(worstCaseInput)); 
 `ppd` is built to run next to your real Paseo and next to coding agents.
 
 - Port 6767 is refused everywhere (daemon, android), and so is any home overlapping `~/.paseo` or a non-temp `PASEO_HOME`.
-- Dev homes must sit strictly inside the system temp dir and carry a marker file. Only marked homes are ever deleted.
+- Dev homes are created under `$TMPDIR` (`os.tmpdir()`, a `/var/folders/...` path on macOS, not `/tmp`), must sit strictly inside a temp dir and carry a marker file. Only marked homes are ever deleted, including the home of a daemon that died.
+- The dev daemon and every Paseo CLI call get a scrubbed env: inherited `PASEO_*` variables (`PASEO_HOME`, `PASEO_AGENT_ID`, `PASEO_CLI`, ...) are dropped, so running `ppd` inside a Paseo agent cannot reach the parent daemon.
 - Every Paseo CLI call gets `--home <dev home>`; `--host` and `--home` passthrough are rejected.
 - `daemon down` signals a pid only if its command line carries that dev home.
 - `android` never sends input, never presses BACK or HOME and never changes settings. It refuses to guess between several devices.
@@ -179,7 +182,7 @@ Or for one plugin repo: copy the same directory into the repo's `.claude/skills/
 ```yaml
 - run: npm ci
 - run: npm test
-- run: npx ppd check              # approximate compile, eval, imports, Hermes, sizes
+- run: npx ppd check              # APPROXIMATION on Linux runners (no Paseo app); eval, imports, Hermes, sizes
 - run: npx ppd registry precheck
 ```
 
@@ -188,7 +191,8 @@ It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and run
 ## Limitations
 
 - **Stubbed:** client eval and the Hermes smoke run use stub host modules, not the real app. They catch load-time failures, not rendering bugs. Use `ppd web` and a device for those.
-- Without `PASEO_SOURCE` the compile is an approximation and icon names are not checked.
+- Without the Paseo app or `PASEO_SOURCE` (Linux CI) the compile is an approximation and icon names are checked only against the plugin's own `lucide-react-native`, if any.
+- Evaluation timeouts are fixed (30 s per bundle, 120 s for the real compile); there is no CLI flag yet.
 - The 32 MiB relay budget comes from field experience, not from Paseo source; direct connections allow 100 MiB.
 - `ppd web` needs Google Chrome or a Playwright Chromium matching `playwright-core`. Its selectors follow the Paseo 0.11 web UI and may need updates when the app changes.
 - No iOS command: the simulator build is manual (see the skill). No multi-touch injection for Android.
@@ -203,6 +207,7 @@ Devkit:
 - Publish to npm.
 - `ppd ios` for the simulator.
 - A fake-host harness for RPC integration tests.
+- A credential-free fake agent provider plugin for end-to-end tests of agent-facing plugins.
 - `ppd new` from `examples/hello-plugin`.
 
 Most remaining pain needs Paseo changes. Upstream asks:
