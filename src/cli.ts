@@ -16,6 +16,7 @@ Usage: ppd <command> [options]
 Dev daemon (isolated: temp home, never port 6767, never ~/.paseo)
   daemon up|down|status   start, stop or inspect an isolated dev daemon
   install [dir]           install or reload a plugin in the dev daemon
+  dev [dir]               install, then reload on every change and stream plugin logs
   paseo -- <args...>      run the Paseo CLI against the dev daemon
   web                     open the web UI in Chrome, screenshot, click through
   android up|down|status  adb reverse to the dev daemon (read-only device checks)
@@ -55,6 +56,15 @@ breaks them with only a console warning. Exits 1 unless the plugin is running an
 
   --git     install the committed HEAD through the manifest build, like a registry install
   --id ID   plugin id to install as (default: manifest id, plus "-git" with --git)
+  --name N  target dev daemon`,
+  dev: `ppd dev [dir] [--id ID] [--name N]
+
+Installs the plugin in dir (default: cwd) into the dev daemon, then watches dir: every change reloads the
+plugin (\`paseo plugin reload\`), re-checks the client against the app's registration rules and prints the
+result. New plugin log lines stream as they appear. Ctrl+C stops watching; the plugin stays installed.
+Changes under node_modules, dist and dot directories are ignored.
+
+  --id ID   plugin id to install as (default: manifest id)
   --name N  target dev daemon`,
   paseo: `ppd paseo [--name N] -- <args...>
 
@@ -160,6 +170,12 @@ async function main(argv: string[]): Promise<number> {
       const result = await installPlugin(resolve(positionals[0] ?? "."), { name: values.name, id: values.id, git: values.git });
       console.log(formatInstall(result));
       return result.status === "running" ? 0 : 1;
+    }
+    case "dev": {
+      const { values, positionals } = parse(rest, { ...name, id: { type: "string" } });
+      const { devLoop } = await import("./dev.ts");
+      await devLoop(resolve(positionals[0] ?? "."), { name: values.name, id: values.id });
+      return 0;
     }
     case "paseo": {
       const separator = rest.indexOf("--");

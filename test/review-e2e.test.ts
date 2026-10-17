@@ -1,9 +1,11 @@
-// Opt-in (PPD_E2E=1) review findings that need a real Paseo daemon and Chrome. `it.fails` while the bug stands.
-// Port: PPD_E2E_PORT (default 7834) so the run stays on one known port.
+// Opt-in (PPD_E2E=1) review findings that need a real Paseo daemon and Chrome (fixed; kept as regressions).
+// Port: PPD_E2E_PORT (default 7834) so the run stays on one known port. With e2e.test.ts on the same port run
+// files one at a time: PPD_E2E=1 PPD_E2E_PORT=7838 npx vitest run --no-file-parallelism
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { daemonDown, daemonUp } from "../src/daemon.ts";
+import { devLoop } from "../src/dev.ts";
 import { installPlugin } from "../src/install.ts";
 import { findPaseoBin } from "../src/paseo.ts";
 import { PaseoWeb } from "../src/web.ts";
@@ -41,4 +43,28 @@ describe.skipIf(!enabled)("review findings against a dev daemon (PPD_E2E=1)", ()
       await web.close();
     }
   }, 180_000);
+
+  it("ppd dev reloads on a change and reports a client the app would reject", async () => {
+    const dir = join(scratch("ppd-review-e2e-"), "dev");
+    cpSync(EXAMPLE, dir, { recursive: true });
+    const lines: string[] = [];
+    let stop = () => {};
+    const until = new Promise<void>((resolve) => (stop = resolve));
+    const loop = devLoop(dir, { name, id: "dev-loop", debounceMs: 100, log: (line) => lines.push(line), until });
+    const waitFor = async (pattern: RegExp) => {
+      for (let i = 0; i < 120 && !lines.some((line) => pattern.test(line)); i++) await new Promise((resolve) => setTimeout(resolve, 250));
+      expect(lines.join("\n")).toMatch(pattern);
+    };
+    try {
+      await waitFor(/^watching /);
+      expect(lines.join("\n")).toMatch(/dev-loop: running \(installed\)/);
+      const entry = join(dir, "index.client.tsx");
+      writeFileSync(entry, readFileSync(entry, "utf8").replace('icon: "Hand"', 'icon: "HandWave"'));
+      await waitFor(/dev-loop: client-rejected \(reloaded\)/);
+      expect(lines.join("\n")).toMatch(/Unknown Lucide icon: HandWave/);
+    } finally {
+      stop();
+      await loop;
+    }
+  }, 120_000);
 });

@@ -78,6 +78,16 @@ export function canReload(entry: PluginEntry, dir: string, git: boolean): boolea
   return !git && kind === "directory" && path !== undefined && resolve(path) === resolve(dir);
 }
 
+/** The message of a `paseo ... --json` failure (`{"error":{"message":...}}`), else the raw output. */
+export function cliErrorMessage(output: string): string {
+  const text = output.trim();
+  try {
+    const message = (JSON.parse(text) as { error?: { message?: unknown } }).error?.message;
+    if (typeof message === "string") return message.replace(/^Request failed: /, "").replace(/ requestType=\S+ code=\S+$/, "");
+  } catch {}
+  return text;
+}
+
 export async function installPlugin(dir: string, options: InstallOptions = {}): Promise<InstallResult> {
   const log = options.log ?? console.log;
   const daemon = requireDaemon(options.name);
@@ -113,7 +123,7 @@ export async function installPlugin(dir: string, options: InstallOptions = {}): 
   const logs = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "logs", id], { timeoutMs: 60_000 }).stdout;
   const failed = step.status !== 0;
   let status = failed ? "install-failed" : entry?.status ?? "unknown";
-  const error = failed ? (step.stderr || step.stdout).trim() : entry?.error ?? null;
+  const error = failed ? cliErrorMessage(step.stderr || step.stdout) : entry?.error ?? null;
   // The daemon only knows about the server half. The app evaluates the client and reports a failure as a
   // console warning nobody sees, so check the client against the app's rules here.
   const client = failed ? null : await checkClient(dir);

@@ -13,7 +13,8 @@ describe.skipIf(!enabled)("dev daemon end to end (PPD_E2E=1)", () => {
   it("installs the example plugin into an isolated daemon and removes the home afterwards", async () => {
     process.env.PPD_STATE_DIR = scratch("ppd-e2e-state-");
     const name = "e2e";
-    const record = await daemonUp({ name, log: () => {} });
+    const port = process.env.PPD_E2E_PORT ? Number(process.env.PPD_E2E_PORT) : undefined;
+    const record = await daemonUp({ name, port, log: () => {} });
     try {
       expect(record.port).not.toBe(6767);
       const result = await installPlugin(EXAMPLE, { name, log: () => {} });

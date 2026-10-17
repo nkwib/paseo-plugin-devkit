@@ -1,6 +1,5 @@
-// Confirmed bugs and host-contract drift from the 2026-10-17 deep review. Each test states the correct
-// behavior and is marked `it.fails` while the bug stands, so `npm test` stays green. Fixing a bug makes its
-// test "unexpectedly pass": then drop the `.fails`.
+// Confirmed bugs and host-contract drift from the 2026-10-17 deep review, all fixed. Each test states the
+// correct behavior and stays as a regression test.
 import { spawnSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
