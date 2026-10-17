@@ -26,7 +26,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: node dist/cli.js check test/fixtures/good-plugin
+      - run: node dist/cli.js check examples/hello-plugin
+      - run: node dist/cli.js registry precheck examples/hello-plugin
 
   paseo-main:
     name: tests against Paseo main

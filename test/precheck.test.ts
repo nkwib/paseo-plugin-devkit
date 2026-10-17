@@ -2,11 +2,11 @@ import { cpSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildFindings, mediaFindings, precheck } from "../src/registry/precheck.ts";
-import { FIXTURES, scratch } from "./helpers.ts";
+import { EXAMPLE, scratch } from "./helpers.ts";
 
 function plugin(): string {
   const dir = join(scratch("ppd-pre-"), "p");
-  cpSync(join(FIXTURES, "good-plugin"), dir, { recursive: true });
+  cpSync(EXAMPLE, dir, { recursive: true, filter: (source) => !source.includes("node_modules") });
   return dir;
 }
 
@@ -57,7 +57,7 @@ describe("build and lockfile", () => {
 });
 
 describe("precheck", () => {
-  it("passes the good fixture apart from Git placement", () => {
+  it("passes the example plugin apart from Git placement", () => {
     const findings = precheck(plugin()).filter((f) => f.level === "error" && f.area !== "git");
     expect(findings).toEqual([]);
   });

@@ -1,8 +1,0 @@
-{
-  "name": "hello-fixture",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "description": "A tiny plugin used by the devkit tests.",
-  "files": ["paseo-plugin.json", "OVERVIEW.md", "assets/", "index.client.tsx", "index.server.ts", "client/", "server/", "shared/"]
-}

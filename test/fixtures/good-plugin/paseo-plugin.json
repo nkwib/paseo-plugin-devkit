@@ -1,8 +1,0 @@
-{
-  "id": "hello-fixture",
-  "name": "Hello fixture",
-  "description": "A tiny plugin used by the devkit tests.",
-  "icon": "assets/icon.png",
-  "media": ["assets/screenshot.png"],
-  "requirements": { "paseo": ">=0.11.0" }
-}

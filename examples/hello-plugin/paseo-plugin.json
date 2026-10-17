@@ -1,0 +1,8 @@
+{
+  "id": "hello-plugin",
+  "name": "Hello plugin",
+  "description": "A minimal Paseo plugin: one server RPC and a workspace panel that calls it.",
+  "icon": "assets/icon.png",
+  "media": ["assets/screenshot.png"],
+  "requirements": { "paseo": ">=0.11.2" }
+}

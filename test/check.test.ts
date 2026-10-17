@@ -6,9 +6,9 @@ import { compileLikePaseo, findPaseoSource } from "../src/check/compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "../src/check/hermes.ts";
 import { runChecks } from "../src/check/index.ts";
 import { parseLucideNames, staticIconNames } from "../src/check/lucide.ts";
-import { FIXTURES } from "./helpers.ts";
+import { EXAMPLE, FIXTURES } from "./helpers.ts";
 
-const GOOD = join(FIXTURES, "good-plugin");
+const GOOD = EXAMPLE;
 const BAD = join(FIXTURES, "bad-plugin");
 const PASEO_SOURCE = findPaseoSource();
 const HERMES = findHermes(GOOD);
@@ -25,13 +25,13 @@ describe("bundle requires", () => {
 describe("compiled fixtures", () => {
   it("evaluates the good server bundle and registers its RPC", async () => {
     const evaluation = evaluateServerBundle(await compileLikePaseo(join(GOOD, "index.server.ts"), "server"), GOOD);
-    expect([...evaluation.handlers.keys()]).toEqual(["hello.get"]);
-    expect(await evaluation.handlers.get("hello.get")!({ who: "you" }, {})).toEqual({ text: "hello you" });
+    expect([...evaluation.handlers.keys()]).toEqual(["hello.greet"]);
+    expect(await evaluation.handlers.get("hello.greet")!({ name: "you" }, {})).toMatchObject({ text: expect.stringMatching(/^Hello, you!/), count: 1 });
   });
 
   it("records client contributions and their icons under stub host modules", async () => {
     const evaluation = await evaluateClientBundle(await compileLikePaseo(join(GOOD, "index.client.tsx"), "client"), GOOD);
-    expect(evaluation.contributions.map((c) => c.method)).toEqual(["addCommandCenterItem", "addScreen"]);
+    expect(evaluation.contributions.map((c) => c.method)).toEqual(["addWorkspacePanel", "addCommandCenterItem"]);
     expect(evaluation.icons).toEqual(["Hand", "MessageCircle"]);
     expect(evaluation.setupError).toBeNull();
   });
@@ -48,7 +48,7 @@ describe("compiled fixtures", () => {
 });
 
 describe("runChecks", () => {
-  it("passes the good fixture, skipping the real compiler clearly when PASEO_SOURCE is absent", async () => {
+  it("passes the example plugin, skipping the real compiler clearly when PASEO_SOURCE is absent", async () => {
     const results = await runChecks(GOOD, { paseoSource: null });
     expect(results.filter((r) => r.status === "fail")).toEqual([]);
     expect(results.find((r) => r.id === "paseo-compile")).toMatchObject({ status: "skip", message: expect.stringContaining("PASEO_SOURCE") });
@@ -86,7 +86,7 @@ describe("Hermes", () => {
 
   it.skipIf(!HERMES.hermes)("the Hermes VM runs the good contribution and reports its icons", async () => {
     const smoke = hermesSmoke(HERMES.hermes!, await compileLikePaseo(join(GOOD, "index.client.tsx"), "client"));
-    expect(smoke).toMatchObject({ ok: true, registered: ["addCommandCenterItem", "addScreen"], icons: ["Hand", "MessageCircle"] });
+    expect(smoke).toMatchObject({ ok: true, registered: ["addWorkspacePanel", "addCommandCenterItem"], icons: ["Hand", "MessageCircle"] });
   });
 });
 
