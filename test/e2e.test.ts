@@ -16,7 +16,7 @@ describe.skipIf(!enabled)("dev daemon end to end (PPD_E2E=1)", () => {
     const record = await daemonUp({ name, log: () => {} });
     try {
       expect(record.port).not.toBe(6767);
-      const result = installPlugin(EXAMPLE, { name, log: () => {} });
+      const result = await installPlugin(EXAMPLE, { name, log: () => {} });
       expect(result, result.logs).toMatchObject({ id: "hello-plugin", status: "running", error: null });
     } finally {
       await daemonDown({ name, log: () => {} });

@@ -20,17 +20,17 @@ describe.skipIf(!enabled)("review findings against a dev daemon (PPD_E2E=1)", ()
   }, 120_000);
   afterAll(() => daemonDown({ name, log: () => {} }));
 
-  it.fails("installs the same directory twice (the edit loop): reinstall or reload instead of 'already configured'", () => {
-    expect(installPlugin(EXAMPLE, { name, log: () => {} }).status).toBe("running");
-    expect(installPlugin(EXAMPLE, { name, log: () => {} }).status).toBe("running");
+  it("installs the same directory twice (the edit loop): reinstall or reload instead of 'already configured'", async () => {
+    expect((await installPlugin(EXAMPLE, { name, log: () => {} })).status).toBe("running");
+    expect((await installPlugin(EXAMPLE, { name, log: () => {} })).status).toBe("running");
   }, 120_000);
 
-  it.fails("surfaces a plugin whose client failed to evaluate (unknown icon): install says running, web says no errors", async () => {
+  it("surfaces a plugin whose client failed to evaluate (unknown icon): install says running, web says no errors", async () => {
     const dir = join(scratch("ppd-review-e2e-"), "bad-icon");
     cpSync(EXAMPLE, dir, { recursive: true });
     const entry = join(dir, "index.client.tsx");
     writeFileSync(entry, readFileSync(entry, "utf8").replace('icon: "Hand"', 'icon: "HandWave"'));
-    const result = installPlugin(dir, { name, id: "bad-icon", log: () => {} });
+    const result = await installPlugin(dir, { name, id: "bad-icon", log: () => {} });
     const web = await PaseoWeb.launch({ url });
     try {
       await web.page.waitForTimeout(3000);

@@ -1,9 +1,12 @@
 // Install a plugin directory into the dev daemon, as a directory source or as a file:// Git source.
 // Git mode installs the committed HEAD, so it runs the manifest `build` exactly like a registry install.
+// Installing an id that is already configured reloads it (same directory) or replaces it, so the edit loop
+// can run `ppd install` repeatedly.
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { requireDaemon } from "./daemon.ts";
+import { checkClient } from "./check/index.ts";
+import { requireDaemon, type DaemonRecord } from "./daemon.ts";
 import { runPaseo } from "./paseo.ts";
 import { run } from "./proc.ts";
 
@@ -16,9 +19,14 @@ export interface InstallOptions {
 
 export interface InstallResult {
   id: string;
+  /** The daemon's plugin status ("running", ...), "install-failed", or "client-rejected" when the app would not evaluate the client. */
   status: string;
+  action: "installed" | "reloaded" | "replaced";
   error: string | null;
   logs: string;
+  /** Registration errors that make the app drop the whole plugin client (unknown icon, bad id, ...). */
+  clientErrors: string[];
+  clientNotes: string[];
 }
 
 export function readManifest(dir: string): { id: string; [key: string]: unknown } {
@@ -31,32 +39,87 @@ export function installSource(dir: string, git: boolean): string {
   return git ? pathToFileURL(resolve(dir)).href : resolve(dir);
 }
 
-export function pluginEntry(list: unknown, id: string): { status?: string; error?: string | null } | null {
-  const entries = Array.isArray(list) ? list : (list as { plugins?: unknown[] } | null)?.plugins ?? [list];
-  const found = entries.find((entry) => (entry as { id?: string } | null)?.id === id);
-  return (found as { status?: string; error?: string | null }) ?? null;
+interface PluginEntry {
+  id?: string;
+  status?: string;
+  error?: string | null;
+  path?: string;
+  installation?: { identity?: { kind?: string; path?: string } };
 }
 
-export function installPlugin(dir: string, options: InstallOptions = {}): InstallResult {
+export function pluginEntry(list: unknown, id: string): PluginEntry | null {
+  const entries = Array.isArray(list) ? list : (list as { plugins?: unknown[] } | null)?.plugins ?? [list];
+  const found = entries.find((entry) => (entry as { id?: string } | null)?.id === id);
+  return (found as PluginEntry) ?? null;
+}
+
+function listedPlugin(daemon: DaemonRecord, id: string): PluginEntry | null {
+  const listed = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "ls", "--json"], { timeoutMs: 60_000 });
+  try {
+    return pluginEntry(JSON.parse(listed.stdout), id);
+  } catch {
+    return null;
+  }
+}
+
+/** A directory install of exactly this directory can be reloaded in place; anything else is replaced. */
+export function canReload(entry: PluginEntry, dir: string, git: boolean): boolean {
+  const kind = entry.installation?.identity?.kind ?? "directory";
+  const path = entry.installation?.identity?.path ?? entry.path;
+  return !git && kind === "directory" && path !== undefined && resolve(path) === resolve(dir);
+}
+
+export async function installPlugin(dir: string, options: InstallOptions = {}): Promise<InstallResult> {
   const log = options.log ?? console.log;
   const daemon = requireDaemon(options.name);
   const manifest = readManifest(dir);
-  const id = options.id ?? (options.git ? `${manifest.id}-git` : manifest.id);
-  if (options.git) {
+  const git = Boolean(options.git);
+  const id = options.id ?? (git ? `${manifest.id}-git` : manifest.id);
+  if (git) {
     const dirty = run("git", ["status", "--porcelain"], { cwd: resolve(dir) }).stdout.trim();
     if (dirty) log("note: Git mode installs the committed HEAD; uncommitted changes are not included");
   }
-  const source = installSource(dir, Boolean(options.git));
-  const shown = options.git ? source : relative(process.cwd(), source) || ".";
-  log(`installing ${shown} as ${id} into ${daemon.url}`);
-  const install = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "install", source, "--id", id, "--json"], { timeoutMs: 900_000 });
-  const listed = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "ls", id, "--json"], { timeoutMs: 60_000 });
-  let entry: ReturnType<typeof pluginEntry> = null;
-  try {
-    entry = pluginEntry(JSON.parse(listed.stdout), id);
-  } catch {}
+  const source = installSource(dir, git);
+  const local = relative(process.cwd(), source) || ".";
+  const shown = git || local.startsWith("..") ? source : local;
+  const existing = listedPlugin(daemon, id);
+  let action: InstallResult["action"] = "installed";
+  let step;
+  if (existing && canReload(existing, dir, git)) {
+    action = "reloaded";
+    log(`reloading ${id} from ${shown} in ${daemon.url}`);
+    step = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "reload", id, "--json"], { timeoutMs: 900_000 });
+  } else {
+    if (existing) {
+      action = "replaced";
+      log(`replacing the configured ${id}`);
+      const removed = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "remove", id, "--json"], { timeoutMs: 120_000 });
+      if (removed.status !== 0) throw new Error(`could not remove the configured ${id}: ${(removed.stderr || removed.stdout).trim()}`);
+    }
+    log(`installing ${shown} as ${id} into ${daemon.url}`);
+    step = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "install", source, "--id", id, "--json"], { timeoutMs: 900_000 });
+  }
+  const entry = listedPlugin(daemon, id);
   const logs = runPaseo(daemon.paseoBin, daemon.home, ["plugin", "logs", id], { timeoutMs: 60_000 }).stdout;
-  const status = install.status !== 0 ? "install-failed" : entry?.status ?? "unknown";
-  const error = install.status !== 0 ? (install.stderr || install.stdout).trim() : entry?.error ?? null;
-  return { id, status, error, logs };
+  const failed = step.status !== 0;
+  let status = failed ? "install-failed" : entry?.status ?? "unknown";
+  const error = failed ? (step.stderr || step.stdout).trim() : entry?.error ?? null;
+  // The daemon only knows about the server half. The app evaluates the client and reports a failure as a
+  // console warning nobody sees, so check the client against the app's rules here.
+  const client = failed ? null : await checkClient(dir);
+  if (client?.errors.length && status === "running") status = "client-rejected";
+  return { id, status, action, error, logs, clientErrors: client?.errors ?? [], clientNotes: client?.notes ?? [] };
+}
+
+/** `ppd install` output lines for a result. */
+export function formatInstall(result: InstallResult): string {
+  const lines = [`${result.id}: ${result.status} (${result.action})${result.error ? `\n${result.error}` : ""}`];
+  if (result.clientErrors.length) {
+    lines.push("client: the app would not evaluate this plugin's client, so none of its UI appears:", ...result.clientErrors.map((error) => `  ${error}`));
+  } else if (result.status === "running") {
+    lines.push("client: passes the app's registration rules");
+  }
+  lines.push(...result.clientNotes.map((note) => `  note: ${note}`));
+  if (result.logs.trim()) lines.push(`--- plugin logs\n${result.logs.trim()}`);
+  return lines.join("\n");
 }

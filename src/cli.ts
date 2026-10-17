@@ -3,7 +3,7 @@
 import { parseArgs, type ParseArgsConfig } from "node:util";
 import { resolve } from "node:path";
 import { daemonDown, daemonStatus, daemonUp, listDaemons, requireDaemon } from "./daemon.ts";
-import { installPlugin } from "./install.ts";
+import { formatInstall, installPlugin } from "./install.ts";
 import { runPaseo } from "./paseo.ts";
 import { parsePort, SafetyError } from "./safety.ts";
 import { UsageError } from "./usage.ts";
@@ -15,7 +15,7 @@ Usage: ppd <command> [options]
 
 Dev daemon (isolated: temp home, never port 6767, never ~/.paseo)
   daemon up|down|status   start, stop or inspect an isolated dev daemon
-  install <dir>           install a plugin into the dev daemon
+  install [dir]           install or reload a plugin in the dev daemon
   paseo -- <args...>      run the Paseo CLI against the dev daemon
   web                     open the web UI in Chrome, screenshot, click through
   android up|down|status  adb reverse to the dev daemon (read-only device checks)
@@ -46,9 +46,12 @@ UI on and relay, MCP and speech off. State lives in ~/.local/state/paseo-plugin-
   --paseo BIN      Paseo CLI to use (default: PASEO_BIN, PATH, the desktop app)
   --keep-home      down: keep the temp home for inspection
   --all            status: list every recorded daemon`,
-  install: `ppd install <dir> [--git] [--id ID] [--name N]
+  install: `ppd install [dir] [--git] [--id ID] [--name N]
 
-Installs a plugin into the dev daemon and prints its status and logs. Exits 1 unless the plugin is running.
+Installs the plugin in dir (default: cwd) into the dev daemon and prints its status and logs. An id that is
+already configured is reloaded (same directory) or replaced, so rerun it after every edit. The client is
+checked against the app's registration rules (icons, ids, contexts, cleanup): the app drops a client that
+breaks them with only a console warning. Exits 1 unless the plugin is running and its client passes.
 
   --git     install the committed HEAD through the manifest build, like a registry install
   --id ID   plugin id to install as (default: manifest id, plus "-git" with --git)
@@ -147,11 +150,8 @@ async function main(argv: string[]): Promise<number> {
       return daemon(rest);
     case "install": {
       const { values, positionals } = parse(rest, { ...name, git: { type: "boolean" }, id: { type: "string" } });
-      const dir = positionals[0];
-      if (!dir) throw new UsageError("ppd install <dir> [--git] [--id ID] [--name N]");
-      const result = installPlugin(resolve(dir), { name: values.name, id: values.id, git: values.git });
-      console.log(`${result.id}: ${result.status}${result.error ? `\n${result.error}` : ""}`);
-      if (result.logs.trim()) console.log(`--- plugin logs\n${result.logs.trim()}`);
+      const result = await installPlugin(resolve(positionals[0] ?? "."), { name: values.name, id: values.id, git: values.git });
+      console.log(formatInstall(result));
       return result.status === "running" ? 0 : 1;
     }
     case "paseo": {

@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isCompactViewport, parseViewport, pickWorkspace } from "../src/web.ts";
+import { pluginEvaluationFailure, isCompactViewport, parseViewport, pickWorkspace } from "../src/web.ts";
 
 describe("web helpers", () => {
+  it("reads the app's plugin evaluation warning (packages/app/src/plugins/registry.ts)", () => {
+    const text = "[Plugins] Failed to evaluate srv_CzB_YUiq_IOy/bad-icon Error: Unknown Lucide icon: HandWave\n    at _e.resolvePluginIcon (http://x/index.js:1:2)";
+    expect(pluginEvaluationFailure(text)).toBe("bad-icon: Error: Unknown Lucide icon: HandWave");
+    expect(pluginEvaluationFailure("[Plugins] API cleanup failed for srv/x")).toBeNull();
+  });
+
   it("parses viewports", () => {
     expect(parseViewport("390x844")).toEqual({ width: 390, height: 844 });
     expect(() => parseViewport("390*844")).toThrow(/390x844/);

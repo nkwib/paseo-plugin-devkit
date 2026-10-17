@@ -275,3 +275,42 @@ export async function checkCommand(args: string[]): Promise<number> {
   console.log(values.json ? JSON.stringify(results, null, 2) : formatResults(results));
   return results.some((result) => result.status === "fail") ? 1 : 0;
 }
+
+export interface ClientCheck {
+  /** Registration errors: the app would evaluate none of the plugin's client. */
+  errors: string[];
+  /** Warnings worth showing (stub limits, cleanup leaks), or a reason the check could not run. */
+  notes: string[];
+  /** Where the Lucide names came from, or null when icons were not checked. */
+  iconSource: string | null;
+}
+
+/**
+ * The client half of `ppd check` for commands that install: compiles the client entry and evaluates it against
+ * the app's registration rules and Lucide names. Null when the plugin has no client.
+ */
+export async function checkClient(pluginDir: string, options: CheckOptions = {}): Promise<ClientCheck | null> {
+  const dir = resolve(pluginDir);
+  const entry = findEntries(dir).client;
+  if (!entry) return null;
+  const paseoSource = options.paseoSource === undefined ? findPaseoSource() : options.paseoSource;
+  const lucide = lucideIconNames([paseoSource, dir]);
+  let bundle: string;
+  try {
+    bundle = await compileLikePaseo(entry, "client");
+  } catch (error) {
+    return { errors: [`client compile failed: ${(error as Error).message.split("\n")[0]}`], notes: [], iconSource: null };
+  }
+  const outcome = await evaluateIsolated("client", bundle, dir, { timeoutMs: options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS, icons: lucide?.names ?? null });
+  const iconSource = lucide?.source ?? null;
+  if (!outcome.ok) return { errors: [outcome.error], notes: [], iconSource };
+  const result = outcome.result;
+  if ("error" in result) return { errors: [result.error], notes: [], iconSource };
+  if (result.target !== "client") return null;
+  const notes = [
+    ...(result.setupError ? [`contribution threw under stub host modules (may be a stub limit): ${result.setupError}`] : []),
+    ...(cleanupWarning(result) ? [cleanupWarning(result)!] : []),
+    ...(iconSource ? [] : ["icon names not checked: no Lucide list found"]),
+  ];
+  return { errors: result.contractErrors, notes, iconSource };
+}

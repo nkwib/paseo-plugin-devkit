@@ -2,7 +2,7 @@
 // Selectors use accessible names that the Paseo app ships (aria-labels and the Command Center
 // placeholder), so plugin tests do not rediscover them.
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Browser, Locator, Page } from "playwright-core";
 import { requireDaemon, type DaemonRecord } from "./daemon.ts";
@@ -52,8 +52,21 @@ async function launchBrowser(options: LaunchOptions): Promise<Browser> {
   }
 }
 
+/**
+ * The app evaluates plugin clients in the page and reports a failure only as
+ * console.warn("[Plugins] Failed to evaluate <serverId>/<pluginId>", error) (packages/app/src/plugins/registry.ts).
+ * Returns "<pluginId>: <error>" for such a console message, else null.
+ */
+export function pluginEvaluationFailure(text: string): string | null {
+  const match = /^\[Plugins\] Failed to evaluate [^/\s]+\/(\S+)\s*(.*)$/m.exec(text);
+  return match ? `${match[1]}: ${match[2]?.trim() || "unknown error"}` : null;
+}
+
 export class PaseoWeb {
+  /** Console errors, page errors and plugin evaluation failures. */
   readonly errors: string[] = [];
+  /** Plugins whose client the app failed to evaluate: none of their UI exists. "<pluginId>: <error>". */
+  readonly pluginErrors: string[] = [];
   readonly browser: Browser;
   readonly page: Page;
   readonly baseUrl: string;
@@ -63,7 +76,11 @@ export class PaseoWeb {
     this.page = page;
     this.baseUrl = baseUrl;
     page.on("console", (message) => {
-      if (message.type() === "error") this.errors.push(message.text().slice(0, 500));
+      const failure = message.type() === "warning" ? pluginEvaluationFailure(message.text()) : null;
+      if (failure) {
+        if (!this.pluginErrors.includes(failure)) this.pluginErrors.push(failure);
+        this.errors.push(`[Plugins] Failed to evaluate ${failure}`);
+      } else if (message.type() === "error") this.errors.push(message.text().slice(0, 500));
     });
     page.on("pageerror", (error) => this.errors.push(`pageerror: ${error.message}`));
   }
@@ -211,12 +228,18 @@ export async function webCommand(args: string[]): Promise<number> {
     if (values.command) await web.runCommand(values.command);
     for (const label of values.click ?? []) await web.click(label);
     await web.page.waitForTimeout(values.wait ? Number(values.wait) : 1500);
-    if (values.shot) console.log(`screenshot: ${relative(process.cwd(), await web.shot(values.shot, values["full-page"]))}`);
+    if (values.shot) console.log(`screenshot: ${await web.shot(values.shot, values["full-page"])}`);
     if (values.headed && !values.shot) {
       console.log("browser open; press Ctrl+C to close");
       await new Promise<void>((resolveClose) => web.page.on("close", () => resolveClose()));
     }
-    console.log(web.errors.length ? `console errors:\n  ${web.errors.join("\n  ")}` : "console errors: none");
+    const consoleErrors = web.errors.filter((error) => !error.startsWith("[Plugins] Failed to evaluate"));
+    console.log(consoleErrors.length ? `console errors:\n  ${consoleErrors.join("\n  ")}` : "console errors: none");
+    if (web.pluginErrors.length) {
+      console.log(`plugin clients that failed to evaluate (the app shows none of their UI):\n  ${web.pluginErrors.join("\n  ")}`);
+      return 1;
+    }
+    console.log("plugin evaluation errors: none");
     return 0;
   } finally {
     await web.close().catch(() => {});
