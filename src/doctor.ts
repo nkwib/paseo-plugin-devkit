@@ -4,6 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { findAdb } from "./android.ts";
+import { findPaseoApp, findPaseoSource } from "./check/compile.ts";
 import { findHermes } from "./check/hermes.ts";
 import { isDaemonLive, listDaemons } from "./daemon.ts";
 import { findPaseoBin, findWebDist, paseoVersion } from "./paseo.ts";
@@ -57,10 +58,15 @@ export function collectDoctor(): DoctorItem[] {
   const webDist = findWebDist();
   add("web UI build", webDist ? "ok" : "warn", webDist ?? "no app-dist found; pass --web-dist to `ppd daemon up`");
   const source = process.env.PASEO_SOURCE;
+  const app = findPaseoApp();
   add(
-    "PASEO_SOURCE",
-    source && existsSync(join(source, "packages/server/src/server/plugins/compiler.ts")) ? "ok" : "warn",
-    source ? source.replace(homedir(), "~") : "unset: `ppd check` falls back to an esbuild approximation of the compiler",
+    "check compiler",
+    source || app ? "ok" : "warn",
+    findPaseoSource()
+      ? `PASEO_SOURCE ${source!.replace(homedir(), "~")}`
+      : app
+        ? `Paseo ${app.version ?? "?"} app at ${app.app.replace(homedir(), "~")}${source ? ` (PASEO_SOURCE ${source} is not usable: needs node_modules)` : ""}`
+        : "no Paseo app or PASEO_SOURCE: `ppd check` falls back to an approximation of the compiler",
   );
   const chrome = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/google-chrome"].find(existsSync);
   add("browser", chrome || process.env.PPD_BROWSER ? "ok" : "warn", process.env.PPD_BROWSER ?? chrome ?? "no Chrome: run `npx playwright-core install chromium` or set PPD_BROWSER");

@@ -88,12 +88,19 @@ Never sends input or key events and never changes settings. Refuses to guess bet
 
 Reports Node, the Paseo CLI, the web UI build, PASEO_SOURCE, a browser, Hermes, adb, Xcode, git, gh, free
 disk and running dev daemons. Read-only. Exits 1 only when something required is missing.`,
-  check: `ppd check [dir] [--json] [--paseo-source DIR] [--max-client-kb N] [--max-server-kb N]
+  check: `ppd check [dir] [--json] [--paseo-app APP] [--paseo-source DIR] [--approx] [--max-client-kb N] [--max-server-kb N]
 
 Host-contract checks on the plugin in dir (default: cwd): manifest, import boundaries, dependencies,
-compile, server and client evaluation, Hermes, Lucide icon names, bundle size. Exits 1 on any FAIL.
+compile, server and client evaluation (in child processes, 30 s timeout), the app's registration rules,
+Hermes, Lucide icon names, bundle size. Exits 1 on any FAIL.
 
-  --paseo-source DIR  Paseo checkout with node_modules (default: PASEO_SOURCE) for the real compiler
+The compiler and icon list come from, in order: --paseo-source / PASEO_SOURCE (a Paseo checkout), the
+installed Paseo app (--paseo-app / PASEO_APP, the app behind \`paseo\` on PATH, /Applications/Paseo.app),
+else an esbuild approximation, labeled APPROXIMATION in the output.
+
+  --paseo-app APP     Paseo.app to compile with (default: discovered)
+  --paseo-source DIR  Paseo checkout with node_modules (default: PASEO_SOURCE); wins over the app
+  --approx            force the approximation (what CI without Paseo sees)
   --max-client-kb N   client bundle budget (default 2048)
   --max-server-kb N   server bundle budget (default 32768)
   --json              machine-readable results`,

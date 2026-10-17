@@ -30,31 +30,32 @@ function manifestWith(patch: Record<string, unknown>): string {
   return variant({ "paseo-plugin.json": JSON.stringify({ ...manifest, ...patch }) });
 }
 
-/** The CLI without PASEO_SOURCE, so the approximate path runs on every machine. */
+/** The CLI without PASEO_SOURCE: the installed app's compiler where there is one, else the approximation. */
 function ppd(args: string[], timeout = 20_000) {
   const env: NodeJS.ProcessEnv = { ...process.env, PPD_STATE_DIR: scratch("ppd-review-state-") };
   delete env.PASEO_SOURCE;
   return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env, timeout });
 }
 
-const byId = async (dir: string) => new Map((await runChecks(dir, { paseoSource: null })).map((result) => [result.id, result]));
+/** The approximate path (no Paseo source, no app), which every CI machine without Paseo runs. */
+const byId = async (dir: string) => new Map((await runChecks(dir, { paseoSource: null, paseoApp: null })).map((result) => [result.id, result]));
 
 describe("ppd check runs plugin code in its own process", () => {
-  it("exits when the server contribution starts a timer", () => {
+  it.each([[[]], [["--approx"]]])("exits when the server contribution starts a timer (%j)", (flags: string[]) => {
     const dir = variant({
       "index.server.ts": [
         "server.handle(greetRpc, ({ name }) => greet(name));\n  return () => {};",
         "server.handle(greetRpc, ({ name }) => greet(name));\n  const timer = setInterval(() => {}, 60_000);\n  return () => clearInterval(timer);",
       ],
     });
-    const result = ppd(["check", dir], 15_000);
+    const result = ppd(["check", dir, ...flags], 15_000);
     expect(result.error, "ppd check was killed by the 15 s timeout").toBeUndefined();
     expect(result.status).toBe(0);
   });
 
-  it("does not report success when plugin code calls process.exit(0) at load", () => {
+  it.each([[[]], [["--approx"]]])("does not report success when plugin code calls process.exit(0) at load (%j)", (flags: string[]) => {
     const dir = variant({ "server/greet.ts": [/$/, "\nprocess.exit(0);\n"] });
-    const result = ppd(["check", dir]);
+    const result = ppd(["check", dir, ...flags]);
     expect(result.status).not.toBe(0);
     expect(result.stdout).toMatch(/FAIL\s+server-eval.*process\.exit\(0\)/);
   });
@@ -72,10 +73,12 @@ describe("ppd check runs plugin code in its own process", () => {
         'server.handle(greetRpc, ({ name }) => greet(name));\n  const http = require("node:net").createServer().listen(0, "127.0.0.1");\n  const timer = setInterval(() => {}, 60_000);\n  return () => clearInterval(timer);',
       ],
     });
-    const result = ppd(["check", dir], 15_000);
-    expect(result.error).toBeUndefined();
-    expect(result.stdout).toMatch(/WARN\s+server-eval\s+after cleanup, still open: 1 TCPServerWrap/);
-    expect(result.stdout).not.toMatch(/Timeout/);
+    for (const flags of [[], ["--approx"]]) {
+      const result = ppd(["check", dir, ...flags], 15_000);
+      expect(result.error).toBeUndefined();
+      expect(result.stdout).toMatch(/WARN\s+server-eval\s+after cleanup, still open: 1 TCPServerWrap/);
+      expect(result.stdout).not.toMatch(/Timeout/);
+    }
   });
 
   it("fails a server contribution that returns no cleanup function (plugin-process.ts)", async () => {

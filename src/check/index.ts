@@ -3,11 +3,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { bundleRequires, disallowedClientRequires, disallowedServerRequires, formatKb, sizeReport } from "./bundle.ts";
-import { compileLikePaseo, compileWithPaseo, findEntries, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
+import { compileLikePaseo, compileWithHost, describeHost, findEntries, findPaseoApp, findPaseoHost, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
 import { cleanupWarning, DEFAULT_EVAL_TIMEOUT_MS, evaluateIsolated } from "./isolate.ts";
-import { lucideIconNames, staticIconNames } from "./lucide.ts";
+import { hostIconNames, staticIconNames } from "./lucide.ts";
 import { UsageError } from "../usage.ts";
 
 export type Status = "pass" | "warn" | "fail" | "skip";
@@ -20,7 +20,10 @@ export interface CheckResult {
 }
 
 export interface CheckOptions {
+  /** A Paseo checkout for the real compiler. Undefined: PASEO_SOURCE. Null: do not use one. */
   paseoSource?: string | null;
+  /** A Paseo.app for the real compiler and icon list. Undefined: discover (PASEO_APP, PATH, /Applications). Null: do not use one. */
+  paseoApp?: string | null;
   maxClientBytes?: number;
   maxServerBytes?: number;
   /** Kill plugin evaluation after this long (default 30 s, Paseo's plugin init timeout). */
@@ -86,24 +89,24 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
     deps.map((f) => f.message),
   );
 
-  const paseoSource = options.paseoSource === undefined ? findPaseoSource() : options.paseoSource;
+  const host = findPaseoHost(options);
   let clientBundle: string | null = null;
   let serverBundle: string | null = null;
   let realHandlers: string[] | null = null;
   let realEvalError: string | null = null;
   let realEvalMs: number | null = null;
   let realCleanupWarning: string | null = null;
-  if (paseoSource) {
-    const real = await compileWithPaseo(dir, paseoSource, options.compileTimeoutMs);
+  if (host) {
+    const real = await compileWithHost(dir, host, options.compileTimeoutMs);
     if (real.error && real.stage === "evaluate") {
-      add("paseo-compile", "pass", "Paseo's compilePlugin accepted the plugin");
+      add("paseo-compile", "pass", `compilePlugin of the ${describeHost(host)} accepted the plugin`);
       clientBundle = real.clientBundle;
       serverBundle = real.serverBundle;
       realEvalError = real.error;
     } else if (real.error) {
       add("paseo-compile", "fail", `Paseo ${real.stage} failed: ${real.error.split("\n")[0]}`, real.error.split("\n").slice(1, 20));
     } else {
-      add("paseo-compile", "pass", `Paseo's compilePlugin accepted the plugin (${relative(process.cwd(), paseoSource) || paseoSource})`);
+      add("paseo-compile", "pass", `compilePlugin of the ${describeHost(host)} accepted the plugin`);
       clientBundle = real.clientBundle;
       serverBundle = real.serverBundle;
       realHandlers = real.handlers;
@@ -112,13 +115,13 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       realCleanupWarning = cleanupWarning(real);
     }
   } else {
-    add("paseo-compile", "skip", `real compiler not run: ${PASEO_SOURCE_MISSING}`);
+    add("paseo-compile", "skip", `APPROXIMATION: ${PASEO_SOURCE_MISSING}. Compile, evaluation and icon checks below use an esbuild replica and rules vendored from Paseo, not the host itself`);
   }
-  if (!paseoSource || (!clientBundle && !serverBundle)) {
+  if (!host || (!clientBundle && !serverBundle)) {
     try {
       if (entries.client) clientBundle = await compileLikePaseo(entries.client, "client");
       if (entries.server) serverBundle = await compileLikePaseo(entries.server, "server");
-      add("approx-compile", "pass", "esbuild with Paseo's build options compiled both entries");
+      add("approx-compile", "pass", "approximation: esbuild with Paseo 0.11's build options compiled both entries");
     } catch (error) {
       add("approx-compile", "fail", `esbuild compile failed: ${(error as Error).message.split("\n")[0]}`);
       return results;
@@ -134,7 +137,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
     add("server-requires", bad.length ? "fail" : "pass", bad.length ? `server bundle leaves bare requires that resolve from Paseo's install, not the plugin: ${bad.join(", ")}` : "server requires only host modules and Node built-ins");
   }
 
-  const lucide = lucideIconNames([paseoSource, dir]);
+  const lucide = hostIconNames(host, dir);
   const evalTimeoutMs = options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS;
   const [serverOutcome, clientOutcome] = await Promise.all([
     serverBundle && !realEvalError && !realHandlers ? evaluateIsolated("server", serverBundle, dir, { timeoutMs: evalTimeoutMs }) : null,
@@ -205,13 +208,14 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
 
   const staticIcons = new Set(files.client.flatMap((file) => staticIconNames(readFileSync(file, "utf8"))));
   if (!lucide) {
-    add("lucide-icons", "skip", `no lucide-react-native type list (${PASEO_SOURCE_MISSING}); icons seen: ${[...new Set([...contributionIcons, ...staticIcons])].join(", ") || "none"}`);
+    add("lucide-icons", "skip", `no Lucide list (${PASEO_SOURCE_MISSING}, and the plugin has no lucide-react-native); icons seen: ${[...new Set([...contributionIcons, ...staticIcons])].join(", ") || "none"}`);
   } else {
+    const against = lucide.exact ? `${lucide.names.size} Lucide icons of the ${host ? describeHost(host) : "host"}` : `${lucide.names.size} icons of the plugin's own lucide-react-native (approximation: may differ from the app's version)`;
     const unknownContrib = [...contributionIcons].filter((icon) => !lucide.names.has(icon));
     const unknownStatic = [...staticIcons].filter((icon) => !contributionIcons.has(icon) && !lucide.names.has(icon));
     if (unknownContrib.length) add("lucide-icons", "fail", `unknown Lucide names in contributions (Paseo throws at registration): ${unknownContrib.join(", ")}`);
     else if (unknownStatic.length) add("lucide-icons", "warn", `unknown Lucide names in client source (Icon renders nothing): ${unknownStatic.join(", ")}`);
-    else add("lucide-icons", "pass", `${new Set([...contributionIcons, ...staticIcons]).size} icon name(s) valid against ${lucide.names.size} Lucide icons`);
+    else add("lucide-icons", "pass", `${new Set([...contributionIcons, ...staticIcons]).size} icon name(s) valid against ${against}`);
   }
 
   const maxClient = options.maxClientBytes ?? DEFAULT_MAX_CLIENT_BYTES;
@@ -251,14 +255,19 @@ export async function checkCommand(args: string[]): Promise<number> {
     options: {
       json: { type: "boolean" },
       "paseo-source": { type: "string" },
+      "paseo-app": { type: "string" },
+      approx: { type: "boolean" },
       "max-client-kb": { type: "string" },
       "max-server-kb": { type: "string" },
     },
     strict: true,
   });
   const explicit = values["paseo-source"];
-  const paseoSource = explicit ? findPaseoSource(explicit) : findPaseoSource();
+  const paseoSource = values.approx ? null : explicit ? findPaseoSource(explicit) : findPaseoSource();
   if (explicit && !paseoSource) throw new Error(`${explicit} is not a usable Paseo checkout: it needs ${PASEO_COMPILER} and node_modules (run npm ci there)`);
+  const app = values["paseo-app"];
+  if (app && !findPaseoApp(app)) throw new Error(`${app} is not a Paseo desktop app: it needs Contents/Resources/app.asar and the Paseo Helper`);
+  const paseoApp = values.approx ? null : (app ?? undefined);
   const kib = (flag: "max-client-kb" | "max-server-kb") => {
     const value = values[flag];
     if (value === undefined) return undefined;
@@ -269,6 +278,7 @@ export async function checkCommand(args: string[]): Promise<number> {
   const maxServerBytes = kib("max-server-kb");
   const results = await runChecks(positionals[0] ?? ".", {
     paseoSource,
+    ...(paseoApp !== undefined ? { paseoApp } : {}),
     ...(maxClientBytes !== undefined ? { maxClientBytes } : {}),
     ...(maxServerBytes !== undefined ? { maxServerBytes } : {}),
   });
@@ -293,8 +303,7 @@ export async function checkClient(pluginDir: string, options: CheckOptions = {})
   const dir = resolve(pluginDir);
   const entry = findEntries(dir).client;
   if (!entry) return null;
-  const paseoSource = options.paseoSource === undefined ? findPaseoSource() : options.paseoSource;
-  const lucide = lucideIconNames([paseoSource, dir]);
+  const lucide = hostIconNames(findPaseoHost(options), dir);
   let bundle: string;
   try {
     bundle = await compileLikePaseo(entry, "client");

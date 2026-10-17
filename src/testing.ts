@@ -8,8 +8,8 @@ export {
   RPC_TIMEOUT_MS,
   SERVER_HOST_MODULES,
 } from "./check/host.ts";
-export { compileLikePaseo, compileWithPaseo, findEntries, findPaseoSource, PASEO_SOURCE_MISSING } from "./check/compile.ts";
-export type { PaseoCompileResult, Target } from "./check/compile.ts";
+export { compileLikePaseo, compileWithHost, compileWithPaseo, findEntries, findPaseoApp, findPaseoHost, findPaseoSource, PASEO_SOURCE_MISSING } from "./check/compile.ts";
+export type { PaseoApp, PaseoCompileResult, PaseoHost, Target } from "./check/compile.ts";
 export {
   bundleRequires,
   chainStub,
@@ -20,10 +20,10 @@ export {
   evaluateServerBundle,
   sizeReport,
 } from "./check/bundle.ts";
-export type { ClientEvaluation, Handler, ServerEvaluation } from "./check/bundle.ts";
+export type { ClientEvaluation, ClientEvaluationOptions, Handler, ServerEvaluation } from "./check/bundle.ts";
 export { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./check/hermes.ts";
-export { lucideIconNames, staticIconNames } from "./check/lucide.ts";
+export { appIconNames, hostIconNames, lucideIconNames, staticIconNames } from "./check/lucide.ts";
 export { assertWithinRpcBudget, measureRpc, responseBytes } from "./check/budget.ts";
 export type { RpcBudget, RpcMeasurement } from "./check/budget.ts";
-export { runChecks, formatResults } from "./check/index.ts";
-export type { CheckResult } from "./check/index.ts";
+export { checkClient, runChecks, formatResults } from "./check/index.ts";
+export type { CheckOptions, CheckResult, ClientCheck } from "./check/index.ts";

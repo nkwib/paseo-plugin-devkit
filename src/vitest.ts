@@ -1,7 +1,7 @@
 // One-line host-contract suite for a plugin repo:
 //   import { describeHostContract } from "paseo-plugin-devkit/vitest";
 //   describeHostContract(new URL("..", import.meta.url).pathname);
-// Each `ppd check` result becomes a test. Skipped checks (no PASEO_SOURCE, no hermesc) are reported as skipped.
+// Each `ppd check` result becomes a test. Skipped checks (approximation without a Paseo app, no hermesc) are reported as skipped.
 import { describe, it } from "vitest";
 import { runChecks, type CheckOptions, type CheckResult } from "./check/index.ts";
 

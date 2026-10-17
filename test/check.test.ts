@@ -2,15 +2,16 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { assertWithinRpcBudget, measureRpc } from "../src/check/budget.ts";
 import { bundleRequires, disallowedClientRequires, disallowedServerRequires, evaluateClientBundle, evaluateServerBundle } from "../src/check/bundle.ts";
-import { compileLikePaseo, findPaseoSource } from "../src/check/compile.ts";
+import { compileLikePaseo, findPaseoApp, findPaseoSource } from "../src/check/compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "../src/check/hermes.ts";
 import { runChecks } from "../src/check/index.ts";
-import { parseLucideNames, staticIconNames } from "../src/check/lucide.ts";
+import { appIconNames, parseBundleIconNames, parseLucideNames, staticIconNames } from "../src/check/lucide.ts";
 import { EXAMPLE, FIXTURES } from "./helpers.ts";
 
 const GOOD = EXAMPLE;
 const BAD = join(FIXTURES, "bad-plugin");
 const PASEO_SOURCE = findPaseoSource();
+const PASEO_APP = findPaseoApp();
 const HERMES = findHermes(GOOD);
 
 describe("bundle requires", () => {
@@ -65,11 +66,23 @@ describe("compiled fixtures", () => {
 });
 
 describe("runChecks", () => {
-  it("passes the example plugin, skipping the real compiler clearly when PASEO_SOURCE is absent", async () => {
-    const results = await runChecks(GOOD, { paseoSource: null });
+  it("passes the example plugin on the approximation and labels it as such", async () => {
+    const results = await runChecks(GOOD, { paseoSource: null, paseoApp: null });
     expect(results.filter((r) => r.status === "fail")).toEqual([]);
-    expect(results.find((r) => r.id === "paseo-compile")).toMatchObject({ status: "skip", message: expect.stringContaining("PASEO_SOURCE") });
+    expect(results.find((r) => r.id === "paseo-compile")).toMatchObject({ status: "skip", message: expect.stringMatching(/^APPROXIMATION: .*PASEO_APP.*PASEO_SOURCE/) });
+    expect(results.find((r) => r.id === "approx-compile")?.message).toMatch(/^approximation:/);
   });
+
+  it.skipIf(!PASEO_APP)("compiles with the installed Paseo app and checks icons against its exact set (macOS with Paseo.app)", async () => {
+    const good = await runChecks(GOOD, { paseoSource: null });
+    expect(good.filter((r) => r.status === "fail")).toEqual([]);
+    expect(good.find((r) => r.id === "paseo-compile")?.message).toMatch(/Paseo [\d.]+ app/);
+    expect(good.find((r) => r.id === "approx-compile")).toBeUndefined();
+    expect(good.find((r) => r.id === "lucide-icons")).toMatchObject({ status: "pass", message: expect.stringMatching(/\d{4} Lucide icons of the Paseo/) });
+    const bad = await runChecks(BAD, { paseoSource: null });
+    expect(bad.find((r) => r.id === "lucide-icons")).toMatchObject({ status: "fail", message: expect.stringContaining("NotARealIconName") });
+    expect(bad.find((r) => r.id === "client-eval")?.details).toContain("Unknown Lucide icon: NotARealIconName");
+  }, 120_000);
 
   it("fails the bad fixture on boundaries, server evaluation and class syntax", async () => {
     const results = await runChecks(BAD, { paseoSource: null });
@@ -111,6 +124,19 @@ describe("Lucide names", () => {
   it("parses exported names and aliases from the type declarations", () => {
     const names = parseLucideNames("declare const FileText: LucideIcon;\ndeclare const Hand: LucideIcon;\nexport { FileText, FileText as FileTextIcon, Hand };\n");
     expect([...names].sort()).toEqual(["FileText", "FileTextIcon", "Hand"]);
+  });
+
+  it("reads icon names from the app's Metro web bundle, without Icon", () => {
+    const bundle = '__d(function(g,r,i,a,m,e,d){Object.defineProperty(f,"AArrowDown",{enumerable:!0,get:function(){return g.default}}),Object.defineProperty(f,"ArrowLeft",{enumerable:!0,get:function(){return $t.default}}),Object.defineProperty(f,"Icon",{enumerable:!0,get:function(){return pne.default}}),Object.defineProperty(f,"LucideProvider",{enumerable:!0,get:function(){return b.LucideProvider}})},1);__d(function(){},2)';
+    expect([...parseBundleIconNames(bundle)].sort()).toEqual(["AArrowDown", "ArrowLeft"]);
+  });
+
+  it.skipIf(!PASEO_APP)("reads the installed app's icon set", () => {
+    const icons = appIconNames(PASEO_APP!.resources)!;
+    expect(icons.names.size).toBeGreaterThan(5000);
+    expect(icons.names.has("Hand")).toBe(true);
+    expect(icons.names.has("HandWave")).toBe(false);
+    expect(icons.names.has("Icon")).toBe(false);
   });
 
   it("finds icon literals in client source", () => {
