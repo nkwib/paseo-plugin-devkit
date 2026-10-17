@@ -54,6 +54,10 @@ describe("ppd release CLI", () => {
     writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", version: "1.2.3" }, null, 2));
     git("add", ".");
     git("commit", "-qm", "feat: first");
+    const remote = scratch("ppd-rel-remote-");
+    spawnSync("git", ["init", "-q", "--bare", remote]);
+    git("remote", "add", "origin", remote);
+    git("push", "-q", "origin", "main");
     return dir;
   }
   const ppd = (dir: string, ...args: string[]) => spawnSync(process.execPath, [CLI, "release", ...args, "--dir", dir], { encoding: "utf8", input: "" });
@@ -74,6 +78,28 @@ describe("ppd release CLI", () => {
     expect(result.stdout).toMatch(/dry run: nothing changed/);
     expect(JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).version).toBe("1.2.3");
     expect(spawnSync("git", ["status", "--porcelain"], { cwd: dir, encoding: "utf8" }).stdout).toBe("");
+    expect(spawnSync("git", ["tag"], { cwd: dir, encoding: "utf8" }).stdout).toBe("");
+  });
+
+  it("resumes a release whose commit and tag exist but were never pushed, instead of bumping again", () => {
+    const dir = repo();
+    const git = (...args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", version: "1.2.4" }, null, 2));
+    git("commit", "-qam", "chore: release 1.2.4");
+    git("tag", "-a", "v1.2.4", "-m", "v1.2.4");
+    const result = ppd(dir, "patch", "--dry-run");
+    expect(result.stdout).toMatch(/resuming release v1\.2\.4/);
+    expect(result.stdout).toContain("git push origin v1.2.4");
+    expect(result.stdout).not.toMatch(/git commit|1\.2\.5/);
+    expect(result.stdout).toContain("--notes-file '<notes>'");
+  });
+
+  it("is blocked when origin cannot take the push, before committing or tagging", () => {
+    const dir = repo();
+    spawnSync("git", ["remote", "set-url", "origin", join(dir, "missing.git")], { cwd: dir });
+    const result = ppd(dir, "patch", "--yes");
+    expect(result.status).toBe(1);
+    expect(result.stdout).toMatch(/cannot push main to origin/);
     expect(spawnSync("git", ["tag"], { cwd: dir, encoding: "utf8" }).stdout).toBe("");
   });
 

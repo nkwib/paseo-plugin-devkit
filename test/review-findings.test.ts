@@ -218,7 +218,7 @@ describe("plugins in a subdirectory of a repository", () => {
 });
 
 describe("release", () => {
-  it.fails("checks the remote before committing and tagging, so a failed push leaves no local release behind", () => {
+  it("checks the remote before committing and tagging, so a failed push leaves no local release behind", () => {
     const repo = join(scratch("ppd-rel-"), "plugin");
     cpSync(EXAMPLE, repo, { recursive: true });
     const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });

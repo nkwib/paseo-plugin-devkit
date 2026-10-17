@@ -75,6 +75,14 @@ export function releaseSteps(version: string, branch: string, notesFile: string,
   ];
 }
 
+/** HEAD is `chore: release <version>` and tag v<version> points at it: the commit and tag steps already ran. */
+export function isUnpushedRelease(dir: string, version: string): boolean {
+  const subject = run("git", ["log", "-1", "--format=%s"], { cwd: dir }).stdout.trim();
+  if (subject !== `chore: release ${version}`) return false;
+  const tagged = run("git", ["rev-parse", "-q", "--verify", `refs/tags/v${version}^{commit}`], { cwd: dir }).stdout.trim();
+  return tagged !== "" && tagged === run("git", ["rev-parse", "HEAD"], { cwd: dir }).stdout.trim();
+}
+
 async function confirm(question: string): Promise<boolean> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   try {
@@ -101,38 +109,58 @@ export async function releaseCommand(args: string[]): Promise<number> {
   const git = (gitArgs: string[]) => runOrThrow("git", gitArgs, { cwd: dir }).trim();
   const pkgPath = join(dir, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string };
-  const version = nextVersion(pkg.version, request);
-  const tag = `v${version}`;
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const hasOrigin = run("git", ["remote", "get-url", "origin"], { cwd: dir }).status === 0;
+  const onOrigin = (name: string) => hasOrigin && run("git", ["ls-remote", "--exit-code", "--tags", "origin", `refs/tags/${name}`], { cwd: dir, timeout: 60_000 }).status === 0;
+  // A previous run that committed and tagged but failed to push: finish it instead of releasing the next version.
+  const resume = isUnpushedRelease(dir, pkg.version) && !onOrigin(`v${pkg.version}`);
+  const version = resume ? pkg.version : nextVersion(pkg.version, request);
+  const tag = `v${version}`;
 
   const blockers: string[] = [];
-  if (git(["status", "--porcelain"])) blockers.push("working tree is not clean");
-  if (run("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}`], { cwd: dir }).status === 0) blockers.push(`tag ${tag} already exists`);
-  if (branch === "HEAD") blockers.push("detached HEAD: check out the release branch");
-  if (!values["skip-precheck"] && existsSync(join(dir, "paseo-plugin.json"))) {
-    for (const finding of precheck(dir).filter((f) => f.level === "error" && f.area !== "git")) blockers.push(`registry precheck: ${finding.message}`);
+  const warnings: string[] = [];
+  if (!resume) {
+    if (git(["status", "--porcelain"])) blockers.push("working tree is not clean");
+    if (run("git", ["rev-parse", "-q", "--verify", `refs/tags/${tag}`], { cwd: dir }).status === 0) blockers.push(`tag ${tag} already exists`);
+    if (!values["skip-precheck"] && existsSync(join(dir, "paseo-plugin.json"))) {
+      for (const finding of precheck(dir).filter((f) => f.level === "error" && f.area !== "git")) blockers.push(`registry precheck: ${finding.message}`);
+    }
   }
+  if (branch === "HEAD") blockers.push("detached HEAD: check out the release branch");
+  // Remote preflight before anything is committed or tagged, so a push failure leaves no local release behind.
+  if (!hasOrigin) blockers.push("no origin remote: nothing to push the release to");
+  else if (branch !== "HEAD") {
+    if (!resume && onOrigin(tag)) blockers.push(`tag ${tag} already exists on origin`);
+    const probe = run("git", ["push", "--dry-run", "--porcelain", "origin", `HEAD:refs/heads/${branch}`], { cwd: dir, timeout: 120_000 });
+    if (probe.status !== 0) blockers.push(`cannot push ${branch} to origin: ${(probe.stderr || probe.stdout).trim().split("\n").slice(-2).join(" ")}`);
+  }
+  if (run("gh", ["auth", "status"], { timeout: 30_000 }).status !== 0) warnings.push("gh is missing or not logged in: the GitHub release step will fail (rerun ppd release after `gh auth login`; it resumes)");
 
   const changelogPath = join(dir, "CHANGELOG.md");
   const changelog = existsSync(changelogPath) ? readFileSync(changelogPath, "utf8") : "";
   let section = changelogSection(changelog, version);
   let newChangelog: string | null = null;
-  if (!section) {
+  if (!section && !resume) {
     const lastTag = run("git", ["describe", "--tags", "--abbrev=0"], { cwd: dir }).stdout.trim();
     const subjects = git(["log", "--format=%s", ...(lastTag ? [`${lastTag}..HEAD`] : [])]).split("\n");
     const entries = changelogEntries(subjects);
     newChangelog = insertChangelogSection(changelog, version, new Date().toISOString().slice(0, 10), entries);
     section = changelogSection(newChangelog, version) ?? "";
   }
+  section ??= "";
 
   const work = mkdtempSync(join(tmpdir(), "ppd-release-"));
   const notesFile = join(work, "notes.md");
   writeFileSync(notesFile, `${section}\n`);
-  const steps = releaseSteps(version, branch, notesFile, existsSync(join(dir, "package-lock.json")));
+  const all = releaseSteps(version, branch, notesFile, existsSync(join(dir, "package-lock.json")));
+  const steps = resume ? all.filter((step) => step.argv?.[0] === "gh" || step.argv?.[1] === "push") : all;
+  const shown = (argv: string[]) => shellJoin(argv.map((arg) => (arg === notesFile ? "<notes>" : arg)));
   try {
-    console.log(`release ${pkg.version} -> ${version} on ${branch}${newChangelog ? " (changelog section generated from commits; edit CHANGELOG.md first to curate it)" : ""}`);
+    if (resume) console.log(`resuming release ${tag}: the release commit and tag exist locally but not on origin (ignoring "${request}")`);
+    else console.log(`release ${pkg.version} -> ${version} on ${branch}${newChangelog ? " (changelog section generated from commits; edit CHANGELOG.md first to curate it)" : ""}`);
     console.log(`notes:\n${section.split("\n").map((line) => `  ${line}`).join("\n")}\n`);
-    for (const step of steps) console.log(`  ${step.argv ? shellJoin(step.argv) : `# ${step.description}`}`);
+    for (const step of steps) console.log(`  ${step.argv ? shown(step.argv) : `# ${step.description}`}`);
+    for (const warning of warnings) console.log(`\nwarning: ${warning}`);
     if (blockers.length) {
       console.log(`\nblocked:\n  ${blockers.join("\n  ")}`);
       return 1;
@@ -144,7 +172,11 @@ export async function releaseCommand(args: string[]): Promise<number> {
     if (!values.yes && !(await confirm(`\nrelease ${tag}? [y/N] `))) return 1;
     for (const step of steps) {
       if (step.argv) {
-        console.log(`$ ${shellJoin(step.argv)}`);
+        if (step.argv[0] === "gh" && run("gh", ["release", "view", tag], { cwd: dir, timeout: 60_000 }).status === 0) {
+          console.log(`GitHub release ${tag} already exists`);
+          continue;
+        }
+        console.log(`$ ${shown(step.argv)}`);
         runOrThrow(step.argv[0]!, step.argv.slice(1), { cwd: dir, stdio: "inherit" });
       } else if (newChangelog !== null) {
         writeFileSync(changelogPath, newChangelog);
