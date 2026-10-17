@@ -83,7 +83,7 @@ export async function pickPort(requested: number | undefined, isFree: (port: num
     if (!(await isFree(requested))) throw new SafetyError(`port ${requested} is already in use`);
     return requested;
   }
-  for (let port = DEFAULT_PORT_RANGE.first; port <= DEFAULT_PORT_RANGE.last; port++) {
+  for (let port: number = DEFAULT_PORT_RANGE.first; port <= DEFAULT_PORT_RANGE.last; port++) {
     if (port === REAL_DAEMON_PORT) continue;
     if (await isFree(port)) return port;
   }

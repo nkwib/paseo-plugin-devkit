@@ -34,7 +34,7 @@ Docs: https://github.com/nkwib/paseo-plugin-devkit`;
 
 type Options = NonNullable<ParseArgsConfig["options"]>;
 
-function parse(args: string[], options: Options) {
+function parse<T extends Options>(args: string[], options: T) {
   return parseArgs({ args, options, allowPositionals: true, strict: true });
 }
 
