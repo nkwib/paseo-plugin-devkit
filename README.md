@@ -62,7 +62,7 @@ npx ppd web --command "Open Hello panel" --click Greet --shot out/hello.png
 npx ppd daemon down
 ```
 
-`ppd check` compiles and evaluates with the installed Paseo app's own compiler and evaluator, and checks icon names against the app's Lucide set (both read from `Paseo.app/Contents/Resources/app.asar`). Order: `PASEO_SOURCE` (a [getpaseo/paseo](https://github.com/getpaseo/paseo) checkout with `npm ci` done, to test against unreleased Paseo), then the app (`--paseo-app`, `PASEO_APP`, the app behind `paseo` on PATH, `/Applications/Paseo.app`), then an esbuild replica. Replica results are labeled `APPROXIMATION`; `--approx` forces it.
+`ppd check` compiles and evaluates with the installed Paseo app's own compiler and evaluator, and checks icon names against the app's Lucide set (read from `app.asar` and the web bundle in `Paseo.app/Contents/Resources`). Order: `PASEO_SOURCE` (a [getpaseo/paseo](https://github.com/getpaseo/paseo) checkout with `npm ci` done, to test against unreleased Paseo), then the app (`--paseo-app`, `PASEO_APP`, the app behind `paseo` on PATH, `/Applications/Paseo.app`), then an esbuild replica. Replica results are labeled `APPROXIMATION`; `--approx` forces it.
 
 ## Demo
 
