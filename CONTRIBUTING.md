@@ -35,10 +35,11 @@ cd docs-site
 npm ci
 npm run dev              # http://localhost:5173
 npm run gen:commands     # after changing CLI help text: regenerates src/lib/commands.json from `ppd help`
+npm run check:recipes    # ppd check on every plugin in docs-site/recipes
 npm run build            # static site in docs-site/build
 ```
 
-CI fails when `src/lib/commands.json` is out of date with the CLI.
+CI fails when `src/lib/commands.json` is out of date with the CLI or a recipe fails `ppd check`. Recipe pages show the recipe files as they are in the repo, so change the code there, not in the page.
 
 ## Releases
 
