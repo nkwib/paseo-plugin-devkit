@@ -70,7 +70,7 @@ const TEMPLATE_INFO: Record<Template, { description: string; extraDependencies: 
   },
   "agent-hook": {
     description: "Appends a summary card to the agent timeline when a turn that used tools ends.",
-    // The SDK's hook and PaseoApi types come from these two; without them they resolve to `any`.
+    // Peer dependencies of the SDK that type hook events and PaseoApi; pinned so installers that skip peers (yarn v1, --legacy-peer-deps) still get them.
     extraDependencies: (sdk) => ({ "@getpaseo/client": sdk, "@getpaseo/protocol": sdk }),
   },
 };
