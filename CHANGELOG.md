@@ -9,6 +9,10 @@ Breaking (library API):
 
 Changed:
 
+- Plugin code that `ppd check` runs never sees the caller's `PASEO_*` variables (agent id, CLI, real home), in every compile and evaluation mode.
+- The fake agent runs `bash` steps with `run: true` (from a prompt or `.fake-agent.json`) only in a daemon `ppd daemon up` started; anywhere else the step fails the turn without running.
+- `ppd web` and status probes use the URL built from the checked port; a state record whose URL disagrees is refused.
+- `ppd dev` pauses for 20 s after 8 reloads within 20 s, so a plugin or build writing into its own folder cannot reload forever.
 - `ppd check` compiles, evaluates and checks icons with the installed Paseo app (app.asar) by default. Order: `PASEO_SOURCE`, the app (`--paseo-app`, `PASEO_APP`, the app behind `paseo`, `/Applications`), then the esbuild replica, now labeled `APPROXIMATION`. `--approx` forces it.
 - Plugin code runs in child processes with a 30 s timeout; a hang, an infinite loop or `process.exit` fails instead of hanging `ppd` or passing. The contribution's cleanup is called and handles left open are warnings.
 - Client evaluation applies the app's registration rules (ids, contexts, callbacks, duplicates, icons, cleanup). A violation fails, because the app drops the whole client.
