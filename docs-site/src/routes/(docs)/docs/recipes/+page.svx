@@ -14,11 +14,13 @@ Each recipe is a whole plugin, verified on a dev daemon with the commands on its
 that is checked: pages read it from the repository at build time.
 </p>
 
-| Recipe | What it shows | Uses |
-| --- | --- | --- |
-| [Timeline renderer](/docs/recipes/timeline-renderer) | A card under every agent turn that touched files, and a screen listing all turns. | `server.on("agent.turn_ended")`, `timeline.append`, `addTimelineRenderer`, `addScreen`, an RPC |
-| [Settings screen](/docs/recipes/settings) | A settings screen whose values the server reads when a turn ends. | `defineSettings`, `registerSettings`, `useSettings`, `addSettingsScreen`, `addCommandCenterItem` |
-| [Server hooks](/docs/recipes/server-hooks) | An MCP server injected into every new agent, and a log line for every finished turn. | `server.before("agent.create")`, `server.on("agent.turn_ended")` |
+- **[Timeline renderer](/docs/recipes/timeline-renderer)**: a card under every agent turn that touched files, and a
+  screen listing all turns. Uses `server.on("agent.turn_ended")`, `timeline.append`, `addTimelineRenderer`,
+  `addScreen` and an RPC.
+- **[Settings screen](/docs/recipes/settings)**: a settings screen whose values the server reads when a turn ends.
+  Uses `defineSettings`, `registerSettings`, `useSettings`, `addSettingsScreen` and `addCommandCenterItem`.
+- **[Server hooks](/docs/recipes/server-hooks)**: an MCP server injected into every new agent, and a log line for
+  every finished turn. Uses `server.before("agent.create")` and `server.on("agent.turn_ended")`.
 
 The timeline renderer is the `agent-hook` template of `ppd create`, which the devkit's own tests create, check and
 run. The other two live in
@@ -27,7 +29,9 @@ run. The other two live in
 
 <h2 id="try">Try one</h2>
 
-From any plugin repo with `paseo-plugin-devkit` installed and a dev daemon running:
+The settings and server hooks recipes are in the repository, not in the npm package (the timeline renderer is
+`ppd create --template agent-hook`). Clone the repository, then run from any plugin repo with `paseo-plugin-devkit`
+installed and a dev daemon running:
 
 ```sh
 npx ppd check path/to/recipes/settings

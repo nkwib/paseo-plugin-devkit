@@ -50,6 +50,7 @@
     font-family: var(--font-mono);
     color: var(--c-text);
     font-weight: 600;
+    white-space: nowrap;
   }
 
   .dot {
@@ -83,5 +84,17 @@
     color: var(--c-text-subtle);
     font-size: var(--fs-xs);
     flex-basis: 100%;
+  }
+
+  @media (max-width: 720px) {
+    .meta {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--sp-1);
+    }
+
+    .dot {
+      display: none;
+    }
   }
 </style>

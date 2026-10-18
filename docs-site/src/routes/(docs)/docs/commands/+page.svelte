@@ -93,7 +93,10 @@
     color: var(--c-text-muted);
   }
 
-  .index td:first-child {
-    white-space: nowrap;
+  /* On a phone the usage wraps, so the summary column keeps some width. */
+  @media (min-width: 721px) {
+    .index td:first-child {
+      white-space: nowrap;
+    }
   }
 </style>

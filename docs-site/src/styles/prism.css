@@ -28,10 +28,12 @@ pre.code-block code {
 pre.code-block::before {
   content: attr(data-lang);
   position: absolute;
-  top: var(--sp-2);
+  /* Above the first line, so a long first line does not run under it. */
+  top: 4px;
   right: var(--sp-3);
   font-family: var(--font-mono);
-  font-size: var(--fs-xs);
+  font-size: 10px;
+  line-height: 1;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--c-text-subtle);

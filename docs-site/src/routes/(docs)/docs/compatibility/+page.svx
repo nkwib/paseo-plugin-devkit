@@ -33,7 +33,7 @@ Windows is not supported.
 
 | Relies on | Used by | When it changes |
 | --- | --- | --- |
-| `compiler.js`, `bundle-evaluator.js`, `manifest.js` in `Paseo.app/Contents/Resources/app.asar/node_modules/@getpaseo/server/dist/server/server/plugins` | `ppd check` (real compile and server evaluation) | `paseo-compile` fails with "could not load Paseo's plugin compiler", the expected path, and the verified and found versions. `ppd check --approx` or `PASEO_SOURCE` works around it. |
+| `compiler.js`, `bundle-evaluator.js` and `manifest.js` from `@getpaseo/server` inside the app's `app.asar` (`dist/server/server/plugins`) | `ppd check` (real compile and server evaluation) | `paseo-compile` fails with "could not load Paseo's plugin compiler", the expected path, and the verified and found versions. `ppd check --approx` or `PASEO_SOURCE` works around it. |
 | The Lucide exports in the app's web bundle (`app-dist/_expo/static/js/web/index-*.js`) | icon checks | `lucide-icons` warns and falls back to the plugin's own `lucide-react-native`. |
 | `@getpaseo/client` and `ws` inside `app.asar` | `agentTimeline` | the call fails naming the modules it looked for. |
 | `paseo daemon run --home`, `PASEO_HOME`, `PASEO_LISTEN` and the `config.json` keys | `ppd daemon up` | a start failure prints the daemon output and how it was started. |
