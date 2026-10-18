@@ -10,6 +10,7 @@ import { installArgs, installSource } from "../src/install.ts";
 import { findPaseoBin } from "../src/paseo.ts";
 import { precheck } from "../src/registry/precheck.ts";
 import { HOME_MARKER } from "../src/safety.ts";
+import { HOST_CONTRACT_TESTS } from "../src/vitest.ts";
 import { CLI, EXAMPLE, scratch } from "./helpers.ts";
 
 /** A copy of the example plugin with edits applied: file -> new content, or file -> [search, replace]. */
@@ -92,6 +93,13 @@ describe("ppd check messages", () => {
     const compile = (await byId(dir)).get("approx-compile")!;
     expect(compile.status).toBe("fail");
     expect([compile.message, ...(compile.details ?? [])].join("\n")).toMatch(/hello-panel\.tsx:\d+:\d+/);
+  });
+
+  it("gives the approximation's compile its own vitest test, so a plugin that does not compile fails the suite", async () => {
+    const dir = variant({ "client/hello-panel.tsx": [/$/, "\nexport const broken = ;\n"] });
+    const results = await byId(dir);
+    expect(results.get("approx-compile")?.status).toBe("fail");
+    for (const id of results.keys()) expect(HOST_CONTRACT_TESTS).toContain(id);
   });
 
   it("does not crash on a non-array manifest build", async () => {

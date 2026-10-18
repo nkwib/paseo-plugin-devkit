@@ -5,14 +5,34 @@
 import { describe, it } from "vitest";
 import { runChecks, type CheckOptions, type CheckResult } from "./check/index.ts";
 
+/**
+ * One test per result id `runChecks` reports. The approximation reports its compile as approx-compile next to a
+ * skipped paseo-compile, so it needs its own test: folded into paseo-compile, a plugin that does not compile passed.
+ */
+export const HOST_CONTRACT_TESTS = [
+  "manifest",
+  "imports",
+  "dependencies",
+  "paseo-compile",
+  "approx-compile",
+  "client-requires",
+  "server-requires",
+  "server-eval",
+  "client-eval",
+  "hermes-class",
+  "hermes-parse",
+  "hermes-vm",
+  "lucide-icons",
+  "bundle-size",
+] as const;
+
 export function describeHostContract(pluginDir: string, options: CheckOptions & { allowWarnings?: boolean; timeoutMs?: number } = {}): void {
   describe("Paseo host contract", () => {
     let results: Promise<CheckResult[]> | null = null;
     const all = () => (results ??= runChecks(pluginDir, options));
-    const ids = ["manifest", "imports", "dependencies", "paseo-compile", "client-requires", "server-requires", "server-eval", "client-eval", "hermes-class", "hermes-parse", "hermes-vm", "lucide-icons", "bundle-size"];
-    for (const id of ids) {
+    for (const id of HOST_CONTRACT_TESTS) {
       it(id, async (context) => {
-        const result = (await all()).find((entry) => entry.id === id || (id === "paseo-compile" && entry.id === "approx-compile"));
+        const result = (await all()).find((entry) => entry.id === id);
         if (!result) return context.skip(`${id} not applicable`);
         if (result.status === "skip") return context.skip(result.message);
         const detail = [result.message, ...(result.details ?? [])].join("\n");
