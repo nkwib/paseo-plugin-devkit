@@ -91,6 +91,11 @@ export async function pickPort(requested: number | undefined, isFree: (port: num
   throw new Error(`no free port in ${DEFAULT_PORT_RANGE.first}-${DEFAULT_PORT_RANGE.last}; pass --port`);
 }
 
+/** The only URL ppd talks to for a dev daemon: loopback on the port the guards checked. */
+export function daemonUrl(port: number): string {
+  return `http://127.0.0.1:${assertSafePort(port)}`;
+}
+
 /** Live means the pid is alive and its command line names this record's home. */
 export function isDaemonLive(record: DaemonRecord): boolean {
   if (!isPidAlive(record.pid)) return false;
@@ -168,7 +173,7 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
     pid: child.pid,
     port,
     home,
-    url: `http://${listen}`,
+    url: daemonUrl(port),
     paseoBin,
     paseoVersion: paseoVersion(paseoBin),
     webDist,
@@ -304,7 +309,7 @@ export async function daemonStatus(name = "default"): Promise<DaemonStatus | nul
   const record = readDaemon(name);
   if (!record) return null;
   const live = isDaemonLive(record);
-  const http = live && (await httpReady(`${record.url}/`));
+  const http = live && (await httpReady(`${daemonUrl(record.port)}/`));
   let plugins: unknown = null;
   if (live) {
     const result = runPaseo(record.paseoBin, record.home, ["plugin", "ls", "--json"], { timeoutMs: 30_000 });
@@ -326,7 +331,11 @@ export function requireDaemon(name = "default"): DaemonRecord {
     throw new Error(`no running dev daemon "${name}": run \`ppd daemon up\` first`);
   }
   assertSafeHome(record.home);
-  assertSafePort(record.port);
+  const url = daemonUrl(record.port);
+  // Callers open record.url (ppd web); a record whose url is not its checked port was not written by ppd.
+  if (record.url.replace(/\/$/, "") !== url) {
+    throw new SafetyError(`refusing dev daemon "${name}": its recorded url ${record.url} is not ${url}`);
+  }
   return record;
 }
 

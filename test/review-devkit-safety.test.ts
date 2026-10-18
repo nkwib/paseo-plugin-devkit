@@ -135,7 +135,7 @@ describe("review-devkit-safety: gaps", () => {
     });
   });
 
-  it.fails("requireDaemon rejects a record whose url does not match its checked port", async () => {
+  it("requireDaemon rejects a record whose url does not match its checked port", async () => {
     const state = scratchDir("ppd-review-state-");
     const home = scratchDir("ppd-review-home-");
     process.env.PPD_STATE_DIR = state;
@@ -148,5 +148,7 @@ describe("review-devkit-safety: gaps", () => {
     writeFileSync(join(state, "daemons", "review.json"), JSON.stringify(record));
     // ppd web opens record.url after this check (src/web.ts:213).
     expect(() => requireDaemon("review")).toThrow(SafetyError);
+    writeFileSync(join(state, "daemons", "review.json"), JSON.stringify({ ...record, url: "http://127.0.0.1:7846/" }));
+    expect(requireDaemon("review").port).toBe(7846);
   });
 });
