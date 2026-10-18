@@ -206,6 +206,8 @@ function patchManifest(dir: string, name: string, description: string): void {
   const path = join(dir, "paseo-plugin.json");
   const manifest = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
   const { id, ...rest } = manifest;
+  // paseo plugin init's comment tells the author to add "name"; ppd sets it, so that sentence goes.
+  if (typeof rest.$comment === "string") rest.$comment = rest.$comment.replace(/Add "name": "[^"]*" to set a display name\.\s*/, "");
   writeJson(path, { id, name, description, ...rest });
 }
 

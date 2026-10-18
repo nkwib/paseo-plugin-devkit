@@ -61,6 +61,7 @@ describe("ppd create", () => {
     expect(result.base).toBe("paseo plugin init");
     const manifest = json(join(dir, "paseo-plugin.json"));
     expect(manifest.$comment).toBeTruthy();
+    expect(manifest.$comment).not.toContain('"name"');
     expect(existsSync(join(dir, "client/greeting.tsx"))).toBe(false);
     expect(failures(await runChecks(dir))).toEqual([]);
   }, 180_000);
