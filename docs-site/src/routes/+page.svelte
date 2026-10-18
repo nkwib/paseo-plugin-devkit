@@ -86,7 +86,7 @@ plugin evaluation errors: none`;
       </h1>
       <p class="lede">
         <strong>ppd</strong> is a CLI, vitest helpers and a Claude Code skill for Paseo plugin authors. One command
-        starts a throwaway dev daemon; another checks your plugin against the host's undocumented runtime contract
+        starts a throwaway dev daemon; another checks your plugin against the host's runtime rules
         before you install it.
       </p>
 

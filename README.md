@@ -6,7 +6,7 @@
 
 **Test, verify and ship [Paseo](https://github.com/getpaseo/paseo) plugins without touching your real Paseo.**
 
-`ppd` is a CLI, a set of vitest helpers and a Claude Code skill. One command gives you an isolated dev daemon, another checks your plugin against the host's undocumented runtime contract, others drive the web UI, an Android phone, releases and the registry.
+`ppd` is a CLI, a set of vitest helpers and a Claude Code skill. One command gives you an isolated dev daemon, another checks your plugin against the host's runtime rules, others drive the web UI, an Android phone, releases and the registry.
 
 An unofficial community project, not affiliated with or endorsed by the Paseo team.
 
