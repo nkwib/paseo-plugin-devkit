@@ -1,0 +1,6 @@
+{
+  "id": "mcp-echo",
+  "name": "MCP echo",
+  "description": "Test fixture: injects an HTTP MCP server with an echo tool into every new agent.",
+  "requirements": { "paseo": ">=0.11.2" }
+}
