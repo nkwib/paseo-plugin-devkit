@@ -43,4 +43,4 @@ CI fails when `src/lib/commands.json` is out of date with the CLI or a recipe fa
 
 ## Releases
 
-Maintainers only. Add a `## X.Y.Z (date)` section to `CHANGELOG.md`, bump `package.json`, commit, then tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` checks that the tag matches `package.json`, runs the tests and the package check, and publishes to npm with provenance through Trusted Publishing.
+Maintainers only. Add a `## X.Y.Z (date)` section to `CHANGELOG.md`, bump `package.json`, commit, then tag `vX.Y.Z` and push the tag. `.github/workflows/release.yml` checks that the tag matches `package.json`, runs the tests and the package check, and publishes to npm with provenance through Trusted Publishing. A version already on npm (published by hand) is not published again.
