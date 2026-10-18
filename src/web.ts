@@ -190,6 +190,13 @@ export function pickWorkspace(entries: WorkspaceEntry[], wanted?: string): Works
   return entries.length === 1 ? entries[0]! : null;
 }
 
+/** Why `ppd web` opened no workspace when none was named: shown instead of a silent start page. */
+export function noWorkspaceNote(entries: WorkspaceEntry[]): string {
+  return entries.length
+    ? `${entries.length} workspaces on the dev daemon, none opened: pass --workspace <id, name or dir> (ids: ${entries.map((entry) => entry.workspaceId).join(", ")})`
+    : "no workspace on the dev daemon, showing the start page: `ppd daemon up --workspace <dir>` creates one";
+}
+
 function daemonJson<T>(daemon: DaemonRecord, args: string[]): T | null {
   const result = runPaseo(daemon.paseoBin, daemon.home, [...args, "--json"], { timeoutMs: 30_000 });
   if (result.status !== 0) return null;
@@ -234,6 +241,8 @@ export async function webCommand(args: string[]): Promise<number> {
         console.log(`opened workspace ${workspace.name} (${workspace.workspaceId})`);
       } else if (values.workspace) {
         throw new Error(`no workspace matches ${values.workspace}; create one with \`ppd daemon up --workspace <dir>\``);
+      } else if (serverId) {
+        console.log(noWorkspaceNote(workspaces));
       }
     }
     if (values.command) await web.runCommand(values.command);

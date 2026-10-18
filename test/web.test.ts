@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pluginEvaluationFailure, isCompactViewport, parseViewport, pickWorkspace } from "../src/web.ts";
+import { noWorkspaceNote, pluginEvaluationFailure, isCompactViewport, parseViewport, pickWorkspace } from "../src/web.ts";
 
 describe("web helpers", () => {
   it("reads the app's plugin evaluation warning (packages/app/src/plugins/registry.ts)", () => {
@@ -25,5 +25,8 @@ describe("web helpers", () => {
     expect(pickWorkspace(entries, "/w/app")?.workspaceId).toBe("wks_2");
     expect(pickWorkspace(entries)).toBeNull();
     expect(pickWorkspace([entries[0]!])?.workspaceId).toBe("wks_1");
+    // `paseo run --cwd` makes a second workspace for a directory: say so instead of opening nothing silently.
+    expect(noWorkspaceNote(entries)).toBe("2 workspaces on the dev daemon, none opened: pass --workspace <id, name or dir> (ids: wks_1, wks_2)");
+    expect(noWorkspaceNote([])).toMatch(/^no workspace on the dev daemon/);
   });
 });

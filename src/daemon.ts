@@ -216,8 +216,13 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
   const note = versionNote(record.paseoVersion);
   if (note) log(`  note:  ${note}`);
   if (options.workspace) {
+    // Paseo refuses a workspace for a missing directory, and a scratch dir is the usual target.
+    if (!existsSync(options.workspace)) {
+      mkdirSync(options.workspace, { recursive: true });
+      log(`created ${options.workspace}`);
+    }
     const result = runPaseo(paseoBin, home, ["workspace", "create", "--isolation", "local", "--path", options.workspace, "--json"]);
-    if (result.status !== 0) log(`warning: could not create a workspace for ${options.workspace}: ${result.stderr.trim()}`);
+    if (result.status !== 0) log(`warning: could not create a workspace for ${options.workspace}: ${(result.stderr || result.stdout).trim()}`);
     else log(`workspace created for ${options.workspace}`);
   }
   if (options.fakeAgent) installFakeAgent(record, log);

@@ -19,7 +19,8 @@ Appended rows live in daemon memory: they are gone after a daemon restart.
 npm install
 npm run check                          # ppd check against the installed Paseo app
 npm test                               # unit tests plus the host-contract suite
-npx ppd daemon up --fake-agent --workspace /tmp/{{id}}-ws
+mkdir -p /tmp/{{id}}-ws
+npx ppd daemon up --fake-agent         # `paseo run --cwd` below creates the workspace
 npx ppd install
 npx ppd paseo -- run --provider fake-agent --cwd /tmp/{{id}}-ws '{"steps":[{"write":{"path":"notes.md","content":"hi"}},{"say":"done"}]}'
 npx ppd web --shot out/card.png        # open the agent to see the card

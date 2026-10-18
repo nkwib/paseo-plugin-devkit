@@ -173,9 +173,12 @@ await assertWithinRpcBudget(() => handlers.get("doc.render")!(worstCaseInput)); 
 Agent-facing plugins (hooks, timeline cards, injected MCP tools) need agent turns to test. `ppd daemon up --fake-agent` installs `fake-agent`, a credential-free provider plugin ([`assets/fake-agent`](assets/fake-agent)) that runs a scripted turn per prompt. It emits the timeline items real adapters produce, does the file effects for real in the agent's cwd, and calls tools on the MCP servers in its session config (what plugins inject in `before("agent.create")`), over HTTP or stdio. Paseo's own mock provider needs a development build and supports no MCP servers; this replaces it.
 
 ```sh
+mkdir -p /tmp/ws
 npx ppd daemon up --fake-agent
 npx ppd paseo -- run --provider fake-agent --cwd /tmp/ws '{"steps":[{"write":{"path":"notes.md","content":"hi"}},{"say":"done"}]}'
 ```
+
+`paseo run --cwd` creates a workspace for that directory, so leave `--workspace` off `daemon up` here: with two workspaces, `ppd web` needs `--workspace` to know which one to open.
 
 A prompt is a script when it is JSON (`{"steps":[...]}` or a bare array) or contains a ` ```fake-agent ` fenced block. Otherwise the agent reads turn N from `<cwd>/.fake-agent.json` (`{"turns":[script, ...]}`, the last one repeats), else echoes the prompt as one assistant message. Steps, one key each, run in order:
 
