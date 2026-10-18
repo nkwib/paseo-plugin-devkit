@@ -36,7 +36,20 @@ npx ppd web --command "Open Hello panel" --click Greet --shot out/hello.png
 npx ppd daemon down
 ```
 
-**Use it in your plugin:**
+**Start a new plugin:**
+
+```sh
+npx ppd create ~/code/my-plugin                          # panel template: workspace panel + one RPC
+npx ppd create ~/code/turn-cards --template agent-hook  # turn_ended hook + timeline card
+cd ~/code/my-plugin && npm install
+npm run check && npm test                                # ppd check, unit tests, host-contract suite
+npx ppd daemon up --workspace /tmp/demo-workspace        # agent-hook: add --fake-agent
+npx ppd dev                                              # install, reload on every change
+```
+
+`ppd create` runs `paseo plugin init` (SDK versions matching your Paseo) and adds what init leaves out: tsconfig `node` types, an `@types/node` ~22 pin, `.gitignore`, vitest, `npm run check`, a README. The result passes `ppd check` and installs as is. The devkit dependency defaults to `github:nkwib/paseo-plugin-devkit`; pass `--devkit file:/path/to/clone` for a local checkout.
+
+**Add it to an existing plugin:**
 
 ```sh
 npm install -D github:nkwib/paseo-plugin-devkit   # the repo is private for now: needs read access
@@ -105,8 +118,9 @@ Every command has `ppd <command> --help`.
 
 | Command | What it does |
 | --- | --- |
+| `ppd create <dir>` | New plugin that passes `ppd check` and installs as is. `--template panel` (default: workspace panel, Command Center item, one RPC) or `agent-hook` (`server.on("agent.turn_ended")` appends a timeline card; client renderer and a screen it opens). Wraps `paseo plugin init`, built-in base without it (`--no-init`). `--id`, `--name`, `--devkit`. |
 | `ppd doctor` | Node, Paseo CLI and version, web UI build, check compiler (app or checkout), browser, Hermes, adb, Xcode, gh, disk, running dev daemons. |
-| `ppd daemon up` | Detached daemon in a fresh home under `$TMPDIR` on a free port (7800-7899): plugins and web UI on; relay, MCP and speech off. `--workspace DIR`, `--port`, `--name`, `--caffeinate`. |
+| `ppd daemon up` | Detached daemon in a fresh home under `$TMPDIR` on a free port (7800-7899): plugins and web UI on; relay, MCP and speech off. `--workspace DIR`, `--port`, `--name`, `--caffeinate`, `--fake-agent` (installs the scripted provider below). |
 | `ppd daemon down` / `status` | Stops the daemon and removes its home / shows it with installed plugins. |
 | `ppd install [dir]` | Installs a plugin into the dev daemon, or reloads (same directory) or replaces an installed one, so rerun it after edits. Checks the client against the app's registration rules: an unknown icon or bad id makes the app drop the whole client with only a console warning, so `ppd install` reports `client-rejected` and exits 1. `--git` installs committed HEAD through the manifest `build`, like a registry install; a plugin in a repo subfolder is installed with `--path`. |
 | `ppd dev [dir]` | Installs, then watches: every change reloads the plugin (`paseo plugin reload`), re-checks the client and prints the result; plugin log lines stream as they appear. |
@@ -147,6 +161,42 @@ await assertWithinRpcBudget(() => handlers.get("doc.render")!(worstCaseInput)); 
 ```
 
 `paseo-plugin-devkit/web` exports the `PaseoWeb` Playwright page object for your own browser tests.
+
+## Fake agent
+
+Agent-facing plugins (hooks, timeline cards, injected MCP tools) need agent turns to test. `ppd daemon up --fake-agent` installs `fake-agent`, a credential-free provider plugin ([`assets/fake-agent`](assets/fake-agent)) that runs a scripted turn per prompt. It emits the timeline items real adapters produce, does the file effects for real in the agent's cwd, and calls tools on the MCP servers in its session config (what plugins inject in `before("agent.create")`), over HTTP or stdio. Paseo's own mock provider needs a development build and supports no MCP servers; this replaces it.
+
+```sh
+npx ppd daemon up --fake-agent
+npx ppd paseo -- run --provider fake-agent --cwd /tmp/ws '{"steps":[{"write":{"path":"notes.md","content":"hi"}},{"say":"done"}]}'
+```
+
+A prompt is a script when it is JSON (`{"steps":[...]}` or a bare array) or contains a ` ```fake-agent ` fenced block. Otherwise the agent reads turn N from `<cwd>/.fake-agent.json` (`{"turns":[script, ...]}`, the last one repeats), else echoes the prompt as one assistant message. Steps, one key each, run in order:
+
+| Step | Effect | Timeline item |
+| --- | --- | --- |
+| `{"say": "text"}` | | `assistant_message` |
+| `{"think": "text"}` | | `reasoning` |
+| `{"write": {"path", "content"}}` | writes the file (relative to cwd), creating directories | `tool_call` `Write`, `detail: {type: "write", filePath}` (absolute) |
+| `{"edit": {"path", "old", "new"}}` | replaces the first `old` | `tool_call` `Edit`, `detail: {type: "edit", filePath, oldString, newString}`; `failed` if the file or string is missing |
+| `{"bash": {"command", "output"?, "exitCode"?, "run"?}}` | with `run: true`, runs `sh -c` in cwd (60 s) and reports real output | `tool_call` `Bash`, `detail: {type: "shell", command, cwd, output, exitCode}`; `failed` if exit code is not 0 |
+| `{"mcp": {"server", "tool", "arguments"?}}` | `initialize` then `tools/call` on that server (`"*"`: every server; none configured: nothing) | `tool_call` `mcp__<server>__<tool>`, `detail: {type: "unknown", input, output}`; `failed` on errors or an unknown server |
+| `{"sleep": ms}` | waits (an interrupt cancels the turn) | |
+| `{"fail": "message"}` | ends the turn as failed | `error` |
+
+`"stepDelayMs": N` next to `steps` pauses before every step. A turn emits `user_message`, then the steps, then ends `completed`, `failed` (a `fail` step or an invalid script) or `canceled`, so `agent.turn_started` and `agent.turn_ended` fire as with a real provider. Like real adapters, a file a shell command writes is not attributed to it.
+
+From tests (`paseo-plugin-devkit`):
+
+```ts
+import { agentTimeline, pluginRows, runFakeAgentTurn, sendFakeAgentTurn } from "paseo-plugin-devkit";
+
+const { agentId, status } = runFakeAgentTurn([{ write: { path: "a.ts", content: "x" } }, { say: "done" }], { cwd: workspace });
+sendFakeAgentTurn(agentId, [{ mcp: { server: "my-tools", tool: "show_to_human", arguments: { title: "hi" } } }]);
+const cards = pluginRows(agentTimeline(agentId), "turn-summary"); // plugin rows, which `paseo logs` omits
+```
+
+`agentTimeline` reads the canonical timeline with the Paseo client inside the installed app (it is not on npm), so it needs the desktop app or `PASEO_APP`. Appended plugin rows live in daemon memory; hooks run asynchronously, so poll briefly after a turn. [`test/create-e2e.test.ts`](test/create-e2e.test.ts) is a complete example.
 
 ## Safety model
 
@@ -197,7 +247,7 @@ It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and run
 - `ppd web` needs Google Chrome or a Playwright Chromium matching `playwright-core`. Its selectors follow the Paseo 0.11 web UI and may need updates when the app changes.
 - No iOS command: the simulator build is manual (see the skill). No multi-touch injection for Android.
 - `ppd release` and `ppd registry update` are tested against local Git repos and a stub validator, not yet end to end against GitHub and the live registry.
-- The daemon end-to-end test is opt-in (`PPD_E2E=1 npm test`) because CI has no Paseo CLI.
+- The daemon end-to-end tests are opt-in (`PPD_E2E=1 npm test`, `PPD_E2E_PORT` to pin the port) because CI has no Paseo CLI.
 - macOS and Linux only. Tested on macOS with Paseo 0.11.4.
 
 ## Roadmap
@@ -207,8 +257,7 @@ Devkit:
 - Publish to npm.
 - `ppd ios` for the simulator.
 - A fake-host harness for RPC integration tests.
-- A credential-free fake agent provider plugin for end-to-end tests of agent-facing plugins.
-- `ppd new` from `examples/hello-plugin`.
+- A provider template for `ppd create`.
 
 Most remaining pain needs Paseo changes. Upstream asks:
 

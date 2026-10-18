@@ -21,6 +21,9 @@ Changed:
 
 Added:
 
+- `ppd create <dir> [--template panel|agent-hook]`: wraps `paseo plugin init` (built-in base without it) and adds tsconfig node types, an `@types/node` ~22 pin, `.gitignore`, vitest with a host-contract suite, `npm run check|test|dev` and a README. The output passes `ppd check` and installs as is. `panel` is the hello-plugin panel and RPC; `agent-hook` appends a timeline card on `agent.turn_ended`, with a renderer that opens a screen.
+- `ppd daemon up --fake-agent`: installs a credential-free, scripted provider plugin (`assets/fake-agent`) for e2e tests of agent-facing plugins. JSON turn scripts: `say`, `think`, `write`, `edit`, `bash`, `mcp` (calls tools on injected MCP servers), `sleep`, `fail`.
+- Library: `createPlugin`, `runFakeAgentTurn`, `sendFakeAgentTurn`, `agentTimeline` (plugin rows included, read through the app's client), `pluginRows`, `fakeAgentPrompt`, `installFakeAgent`.
 - `ppd dev [dir]`: install, then reload on every change, re-check the client and stream plugin logs.
 
 Fixed:

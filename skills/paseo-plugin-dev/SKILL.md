@@ -1,6 +1,6 @@
 ---
 name: paseo-plugin-dev
-description: Verify, test, release and publish Paseo plugins safely. Use when building or debugging a Paseo plugin (paseo-plugin.json, index.client.tsx, index.server.ts), running it on an isolated dev daemon or the Paseo web UI, testing on an Android phone or iOS simulator, hitting host limits (Hermes, Lucide icons, RPC timeout, safe area, gestures), or releasing and submitting to the Paseo plugin registry.
+description: Start, verify, test, release and publish Paseo plugins safely. Use when creating a new Paseo plugin, building or debugging one (paseo-plugin.json, index.client.tsx, index.server.ts), running it on an isolated dev daemon or the Paseo web UI, testing agent hooks or timeline cards with a scripted fake agent, testing on an Android phone or iOS simulator, hitting host limits (Hermes, Lucide icons, RPC timeout, safe area, gestures), or releasing and submitting to the Paseo plugin registry.
 ---
 
 # Paseo plugin development
@@ -11,10 +11,10 @@ Tooling: the `ppd` CLI from `paseo-plugin-devkit`, run as `npx ppd <command>`. I
 
 ## Start a plugin
 
-1. `paseo plugin init /absolute/path/to/plugin && cd /absolute/path/to/plugin && npm install`. Init writes a working plugin (sidebar screen plus one RPC) and a strict tsconfig; it has no daemon options and never touches a daemon. Its `$comment` manifest key is fine.
-2. Server code that imports `node:*` needs `"node"` in tsconfig `compilerOptions.types` (init writes only `"react"`), or tsc fails.
-3. Init's dev dependencies pull in `@types/node` 26.x. Paseo <= 0.11.4 type-walks installed packages and `@types/node` 26 broke installs (getpaseo/paseo#7145), so add `"@types/node": "~22"` to devDependencies and rerun `npm install`.
-4. Add a `.gitignore` with `node_modules/` (init writes none), then the devkit as above.
+1. `npx ppd create /absolute/path/to/plugin [--template panel|agent-hook]`, then `cd` there and `npm install`. `panel` (default) is a workspace panel, a Command Center item and one RPC. `agent-hook` is `server.on("agent.turn_ended")` appending a timeline card, plus the card renderer and a screen it opens. Done when `npm run check` has 0 FAIL and `npm test` passes; the output does both before any edit.
+2. Without access to the private devkit repo, pass `--devkit file:<path to a clone>` (the default is `github:nkwib/paseo-plugin-devkit`).
+3. What create adds over `paseo plugin init`, so keep it when restructuring: `"node"` in tsconfig `types` (server `node:*` imports fail tsc without it), the `@types/node` ~22 pin (26.x broke installs on Paseo <= 0.11.4, getpaseo/paseo#7145), `.gitignore`, vitest with `test/host-contract.test.ts`. The agent-hook template also pins `@getpaseo/client` and `@getpaseo/protocol` to the SDK version: without them hook events and `PaseoApi` type as `any`.
+4. Timeline renderers get no navigation props. To open a screen or panel from a card, close over the `client` passed to `contribute` (the agent-hook template's `makeSummaryCard(client)` shows it).
 
 ## Hard rules
 
@@ -36,6 +36,8 @@ Run in order. Each step ends on its stated observable.
 4. **Real UI**: `ppd web --shot out/desktop.png --click "<your header button label>"` and `ppd web --viewport 390x844 --shot out/phone.png --command "<your Command Center item>"`. Done when you have looked at both screenshots and `ppd web` exits 0 with `console errors: none` and `plugin evaluation errors: none`. Console errors alone are not enough: the app reports a client that failed to evaluate only as a warning.
 5. **Devices**, when the change touches layout, gestures, media or memory: see [references/devices.md](references/devices.md).
 6. **Teardown**: `ppd daemon down`. Done when `ppd daemon status` reports no daemon.
+
+**Agent hooks, timeline cards and injected MCP tools**: start the daemon with `ppd daemon up --fake-agent` and drive turns with the credential-free `fake-agent` provider instead of a real agent. A JSON prompt is a script: `ppd paseo -- run --provider fake-agent --cwd <workspace> '{"steps":[{"write":{"path":"a.md","content":"x"}},{"bash":{"command":"npm test"}},{"mcp":{"server":"<injected name>","tool":"<tool>"}},{"say":"done"}]}'`. Steps: `say`, `think`, `write`, `edit`, `bash` (`run: true` executes), `mcp` (`"*"` = every injected server), `sleep`, `fail`. Write and edit carry `detail.filePath` like real adapters. In vitest use `runFakeAgentTurn`, `sendFakeAgentTurn` and `pluginRows(agentTimeline(id), "<kind>")` from `paseo-plugin-devkit` (README, "Fake agent"); `paseo logs` does not show plugin rows. Done when the test asserts the row your hook appended, and a `ppd web` screenshot of the agent shows the card. Do not enable Paseo's mock provider (it needs a dev build and rejects MCP servers).
 
 Iterate with `ppd dev <plugin>`: it installs once, then reloads on every change, re-checks the client and streams plugin logs. Without it, rerun `ppd install <plugin>` (it reloads an installed directory) or use `ppd paseo -- plugin reload <id>` and `ppd paseo -- plugin logs <id>`. A crashed plugin stays down until reloaded.
 
