@@ -99,6 +99,21 @@ export interface ServerEvaluation {
 }
 
 /**
+ * What `server.registerSettings` returns in the host (PluginSettings): a document that reads as its schema
+ * defaults, and a subscription that never fires because nothing is saved during a check.
+ */
+export function settingsHandle(definition: unknown) {
+  let values: unknown = {};
+  try {
+    const parsed = (definition as { schema?: { parse?: (input: unknown) => unknown } } | null)?.schema?.parse?.({});
+    if (parsed && typeof parsed === "object") values = parsed;
+  } catch {
+    // Schemas without defaults for every field: the check still runs, with an empty document.
+  }
+  return { read: async () => ({ status: "ready", revision: "ppd-check", values }), subscribe: () => () => {} };
+}
+
+/**
  * Evaluates a server bundle like Paseo's bundle evaluator and runs its contribution against a recording
  * server. Host modules come from the plugin's own node_modules (its devDependencies), like a typecheck.
  */
@@ -124,6 +139,7 @@ export function evaluateServerBundle(bundle: string, pluginDir: string, override
           ? (first: { name?: string } | string, handler: Handler) => {
               registrations.push(key);
               if (key === "handle") handlers.set(typeof first === "string" ? first : String(first?.name), handler);
+              if (key === "registerSettings") return settingsHandle(first);
               return () => {};
             }
           : undefined,

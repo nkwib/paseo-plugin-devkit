@@ -1,0 +1,6 @@
+{
+  "id": "settings-handle",
+  "name": "Settings handle",
+  "description": "Test fixture: uses the handle that server.registerSettings returns.",
+  "requirements": { "paseo": ">=0.11.4" }
+}

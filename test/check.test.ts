@@ -11,6 +11,7 @@ import { EXAMPLE, FIXTURES } from "./helpers.ts";
 
 const GOOD = EXAMPLE;
 const BAD = join(FIXTURES, "bad-plugin");
+const SETTINGS = join(FIXTURES, "settings-handle");
 const PASEO_SOURCE = findPaseoSource();
 const PASEO_APP = findPaseoApp();
 const HERMES = findHermes(GOOD);
@@ -94,6 +95,16 @@ describe("runChecks", () => {
     expect(imports.details!.join("\n")).toMatch(/react-native-gesture-handler: no gesture-handler/);
     expect(imports.details!.join("\n")).toMatch(/server\/react-leak.ts imports react: React is client-only/);
   });
+
+  it("gives server.registerSettings a handle whose read and subscribe work, like the host", async () => {
+    const approx = await runChecks(SETTINGS, { paseoSource: null, paseoApp: null });
+    expect(approx.find((r) => r.id === "server-eval")).toMatchObject({ status: "pass" });
+  });
+
+  it.skipIf(!PASEO_APP)("gives server.registerSettings a settings handle under the installed Paseo app too", async () => {
+    const real = await runChecks(SETTINGS, { paseoSource: null });
+    expect(real.find((r) => r.id === "server-eval")).toMatchObject({ status: "pass" });
+  }, 120_000);
 
   it("warns when a bundle is over budget", async () => {
     const results = await runChecks(GOOD, { paseoSource: null, maxClientBytes: 10 });

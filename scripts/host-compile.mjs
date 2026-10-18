@@ -53,6 +53,19 @@ if (bundles.serverBundle) writeFileSync(join(outDir, "server.js"), bundles.serve
 result.stage = "compiled";
 save();
 
+// What server.registerSettings returns in the host: a document that reads as its schema defaults, and a
+// subscription that never fires because nothing is saved during a check (src/check/bundle.ts has the same).
+function settingsHandle(definition) {
+  let values = {};
+  try {
+    const parsed = definition?.schema?.parse?.({});
+    if (parsed && typeof parsed === "object") values = parsed;
+  } catch {
+    // Schemas without defaults for every field: the check still runs, with an empty document.
+  }
+  return { read: async () => ({ status: "ready", revision: "ppd-check", values }), subscribe: () => () => {} };
+}
+
 if (bundles.serverBundle) {
   // Plugin code runs from here on. Exiting the process is never a pass.
   process.exit = (code) => {
@@ -72,6 +85,7 @@ if (bundles.serverBundle) {
           return (first) => {
             result.registrations.push(key);
             if (key === "handle") result.handlers.push(typeof first === "string" ? first : String(first?.name));
+            if (key === "registerSettings") return settingsHandle(first);
             return noop;
           };
         },
