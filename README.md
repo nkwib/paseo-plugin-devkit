@@ -179,7 +179,7 @@ A prompt is a script when it is JSON (`{"steps":[...]}` or a bare array) or cont
 | `{"think": "text"}` | | `reasoning` |
 | `{"write": {"path", "content"}}` | writes the file (relative to cwd), creating directories | `tool_call` `Write`, `detail: {type: "write", filePath}` (absolute) |
 | `{"edit": {"path", "old", "new"}}` | replaces the first `old` | `tool_call` `Edit`, `detail: {type: "edit", filePath, oldString, newString}`; `failed` if the file or string is missing |
-| `{"bash": {"command", "output"?, "exitCode"?, "run"?}}` | with `run: true`, runs `sh -c` in cwd (60 s) and reports real output | `tool_call` `Bash`, `detail: {type: "shell", command, cwd, output, exitCode}`; `failed` if exit code is not 0 |
+| `{"bash": {"command", "output"?, "exitCode"?, "run"?}}` | with `run: true`, runs `sh -c` in cwd (60 s) and reports real output; only in a daemon `ppd daemon up` started (its home has `.ppd-home`), elsewhere the step fails the turn without running | `tool_call` `Bash`, `detail: {type: "shell", command, cwd, output, exitCode}`; `failed` if exit code is not 0 |
 | `{"mcp": {"server", "tool", "arguments"?}}` | `initialize` then `tools/call` on that server (`"*"`: every server; none configured: nothing) | `tool_call` `mcp__<server>__<tool>`, `detail: {type: "unknown", input, output}`; `failed` on errors or an unknown server |
 | `{"sleep": ms}` | waits (an interrupt cancels the turn) | |
 | `{"fail": "message"}` | ends the turn as failed | `error` |

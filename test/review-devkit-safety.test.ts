@@ -2,13 +2,13 @@
 // while it exists; plain `it` pins a bypass attempt that the guards already stop. Nothing here starts a daemon,
 // binds a port, or points at the real ~/.paseo: homes are fake (HomeContext) and records name a scratch state dir.
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { evaluateIsolated, runChild } from "../src/check/isolate.ts";
 import { requireDaemon } from "../src/daemon.ts";
-import { assertSafeHome, parsePort, SafetyError, type HomeContext } from "../src/safety.ts";
+import { assertSafeHome, HOME_MARKER, parsePort, SafetyError, type HomeContext } from "../src/safety.ts";
 
 // The SDK provider module is supplied by the host at runtime; only the plugin's own guard is under test.
 vi.mock("@getpaseo/plugin/server/provider", () => ({ negotiateProviderCapabilities: () => [], requireProviderCapabilities: () => {} }));
@@ -71,20 +71,68 @@ describe("review-devkit-safety: gaps", () => {
     expect(outcome.stderr).toBe("none");
   }, 60_000);
 
-  it.fails("the fake agent (bash run: true) refuses to register outside a ppd-created home", async () => {
-    // A home without the .ppd-home marker, as the user's daemon would have.
-    process.env.PASEO_HOME = scratchDir("ppd-review-not-ppd-");
-    const providers: unknown[] = [];
-    let refused = false;
-    // A computed specifier keeps the plugin asset (built by the host, not by this tsconfig) out of the typecheck.
-    const asset = new URL("../assets/fake-agent/index.server.ts", import.meta.url).href;
-    const { default: contributeFakeAgent } = (await import(asset)) as { default: (server: unknown) => void };
-    try {
-      contributeFakeAgent({ registerProvider: (provider: unknown) => providers.push(provider) });
-    } catch {
-      refused = true;
-    }
-    expect(refused || providers.length === 0).toBe(true);
+  // A plain `paseo plugin install` puts the plugin in a daemon whose home has no .ppd-home; the plugin process
+  // inherits the daemon's env (upstream server/plugins/runtime.ts forks without an env), so PASEO_HOME is that home.
+  describe("fake agent shell steps", () => {
+    type Item = { type: string; status?: string; error?: string | null; detail?: { output?: string; exitCode?: number } };
+    const provider = async () => {
+      const asset = new URL("../assets/fake-agent/server/provider.ts", import.meta.url).href;
+      return (await import(asset)) as {
+        chooseScript(text: string, cwd: string, turn: number): { steps: unknown[] };
+        runStep(step: unknown, id: string, session: unknown, item: (value: Item) => void, signal: AbortSignal): Promise<string | null>;
+      };
+    };
+    const runAll = async (steps: unknown[], cwd: string) => {
+      const { runStep } = await provider();
+      const items: Item[] = [];
+      const session = { config: { cwd, mcpServers: {}, env: {} }, persistence: null, turn: 1, abort: null };
+      for (const [index, step] of steps.entries()) {
+        const failed = await runStep(step, `1-${index}`, session, (value) => items.push(value), new AbortController().signal);
+        if (failed !== null) return { failed, items };
+      }
+      return { failed: null, items };
+    };
+    const proofStep = { bash: { command: "echo ran > proof.txt", run: true } };
+
+    it("uses the marker name ppd writes into its homes", async () => {
+      const asset = new URL("../assets/fake-agent/server/isolation.ts", import.meta.url).href;
+      expect(((await import(asset)) as { PPD_HOME_MARKER: string }).PPD_HOME_MARKER).toBe(HOME_MARKER);
+    });
+
+    it("refuses run: true in a daemon whose home ppd did not create", async () => {
+      process.env.PASEO_HOME = scratchDir("ppd-review-user-home-");
+      const cwd = scratchDir("ppd-review-cwd-");
+      const { failed, items } = await runAll([proofStep], cwd);
+      expect(failed).toMatch(/refused/);
+      expect(items).toEqual([expect.objectContaining({ type: "tool_call", status: "failed", detail: expect.objectContaining({ exitCode: 126 }) })]);
+      expect(existsSync(join(cwd, "proof.txt"))).toBe(false);
+    });
+
+    it("refuses run: true when PASEO_HOME is unset", async () => {
+      delete process.env.PASEO_HOME;
+      const cwd = scratchDir("ppd-review-cwd-");
+      expect((await runAll([proofStep], cwd)).failed).toMatch(/refused/);
+      expect(existsSync(join(cwd, "proof.txt"))).toBe(false);
+    });
+
+    it("refuses shell steps from a repository's .fake-agent.json too", async () => {
+      process.env.PASEO_HOME = scratchDir("ppd-review-user-home-");
+      const cwd = scratchDir("ppd-review-cwd-");
+      writeFileSync(join(cwd, ".fake-agent.json"), JSON.stringify({ turns: [[{ say: "hi" }, proofStep]] }));
+      const { chooseScript } = await provider();
+      const { failed } = await runAll(chooseScript("plain prompt", cwd, 1).steps, cwd);
+      expect(failed).toMatch(/refused/);
+      expect(existsSync(join(cwd, "proof.txt"))).toBe(false);
+    });
+
+    it("runs run: true in a ppd dev daemon (home with the marker)", async () => {
+      const home = scratchDir("ppd-review-dev-home-");
+      writeFileSync(join(home, HOME_MARKER), "created by the test\n");
+      process.env.PASEO_HOME = home;
+      const cwd = scratchDir("ppd-review-cwd-");
+      expect((await runAll([proofStep], cwd)).failed).toBeNull();
+      expect(readFileSync(join(cwd, "proof.txt"), "utf8")).toBe("ran\n");
+    });
   });
 
   it.fails("requireDaemon rejects a record whose url does not match its checked port", async () => {

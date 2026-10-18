@@ -15,6 +15,7 @@ import {
 import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { shellRefusal } from "./isolation";
 import { callMcpTool } from "./mcp";
 import { defaultScript, scriptFromPrompt, scriptFromTurnsFile, TURNS_FILE, type FakeScript, type FakeStep } from "./script";
 
@@ -112,7 +113,7 @@ async function dispatch(input: ProviderInput, sessions: Map<string, Session>, em
   }
 }
 
-function chooseScript(text: string, cwd: string, turn: number): FakeScript {
+export function chooseScript(text: string, cwd: string, turn: number): FakeScript {
   const fromPrompt = scriptFromPrompt(text);
   if (fromPrompt) return fromPrompt;
   const turnsFile = join(cwd, TURNS_FILE);
@@ -176,8 +177,8 @@ async function prompt(input: Extract<ProviderInput, { type: "session.prompt" }>,
   finish("completed");
 }
 
-/** Runs one step. Returns an error message when the step fails the turn (`fail`), else null. */
-async function runStep(step: FakeStep, id: string, session: Session, item: (value: Item) => void, signal: AbortSignal): Promise<string | null> {
+/** Runs one step. Returns an error message when the step fails the turn (`fail`, a refused command), else null. */
+export async function runStep(step: FakeStep, id: string, session: Session, item: (value: Item) => void, signal: AbortSignal): Promise<string | null> {
   const cwd = session.config.cwd;
   const abs = (path: string) => (isAbsolute(path) ? path : resolve(cwd, path));
   const tool = (name: string, detail: Extract<Item, { type: "tool_call" }>["detail"], error: string | null = null) =>
@@ -210,6 +211,11 @@ async function runStep(step: FakeStep, id: string, session: Session, item: (valu
       const exitCode = step.bash.exitCode ?? 0;
       tool("Bash", { type: "shell", command, cwd, output: step.bash.output ?? "", exitCode }, exitCode === 0 ? null : `exit code ${exitCode}`);
     } else {
+      const refusal = shellRefusal();
+      if (refusal !== null) {
+        tool("Bash", { type: "shell", command, cwd, output: refusal, exitCode: 126 }, refusal);
+        return refusal;
+      }
       const result = await new Promise<{ output: string; exitCode: number }>((done) => {
         execFile("/bin/sh", ["-c", command], { cwd, timeout: 60_000, signal }, (error, stdout, stderr) => {
           const code = error ? (typeof (error as { code?: unknown }).code === "number" ? (error as { code: number }).code : 1) : 0;
