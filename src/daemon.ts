@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { findPaseoBin, findWebDist, paseoVersion, runPaseo } from "./paseo.ts";
+import { FAKE_AGENT_DIR, FAKE_AGENT_ID } from "./fake-agent.ts";
 import { isPidAlive, isPortFree, processCommand, sleep, waitFor, which } from "./proc.ts";
 import {
   assertSafeHome,
@@ -113,6 +114,8 @@ export interface UpOptions {
   webDist?: string;
   workspace?: string;
   caffeinate?: boolean;
+  /** Install the credential-free fake agent provider plugin (`fake-agent`) after startup. */
+  fakeAgent?: boolean;
   timeoutMs?: number;
   log?: (line: string) => void;
 }
@@ -126,6 +129,7 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
       throw new Error(`dev daemon "${name}" is already running on port ${existing.port}: run \`ppd daemon down${name === "default" ? "" : ` --name ${name}`}\` first, or pass --name for a second daemon`);
     }
     log(`dev daemon "${name}" already running at ${existing.url} (pid ${existing.pid})`);
+    if (options.fakeAgent) installFakeAgent(existing, log);
     return existing;
   }
   if (existing) {
@@ -202,8 +206,28 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
     if (result.status !== 0) log(`warning: could not create a workspace for ${options.workspace}: ${result.stderr.trim()}`);
     else log(`workspace created for ${options.workspace}`);
   }
+  if (options.fakeAgent) installFakeAgent(record, log);
 
   return record;
+}
+
+/** Installs (or reloads) the devkit's fake agent provider plugin. Throws unless it ends up running. */
+export function installFakeAgent(record: DaemonRecord, log: (line: string) => void = console.log): void {
+  const listed = runPaseo(record.paseoBin, record.home, ["plugin", "ls", "--json"], { timeoutMs: 60_000 });
+  const configured = listed.status === 0 && listed.stdout.includes(`"${FAKE_AGENT_ID}"`);
+  const step = configured
+    ? runPaseo(record.paseoBin, record.home, ["plugin", "reload", FAKE_AGENT_ID, "--json"], { timeoutMs: 300_000 })
+    : runPaseo(record.paseoBin, record.home, ["plugin", "install", FAKE_AGENT_DIR, "--id", FAKE_AGENT_ID, "--json"], { timeoutMs: 300_000 });
+  const after = runPaseo(record.paseoBin, record.home, ["plugin", "ls", "--json"], { timeoutMs: 60_000 });
+  let status = "unknown";
+  try {
+    const entries = JSON.parse(after.stdout) as Array<{ id?: string; status?: string }> | { plugins?: Array<{ id?: string; status?: string }> };
+    status = (Array.isArray(entries) ? entries : entries.plugins ?? []).find((entry) => entry.id === FAKE_AGENT_ID)?.status ?? "missing";
+  } catch {}
+  if (step.status !== 0 || status !== "running") {
+    throw new Error(`fake agent did not start (${status}): ${(step.stderr || step.stdout).trim()}`);
+  }
+  log(`fake agent provider "${FAKE_AGENT_ID}" ${configured ? "reloaded" : "installed"}: paseo run --provider ${FAKE_AGENT_ID} '<script JSON>'`);
 }
 
 function tail(file: string, lines = 30): string {

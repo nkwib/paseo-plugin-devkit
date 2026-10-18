@@ -52,6 +52,7 @@
     "skills",
     "examples",
     "templates",
+    "assets",
     "CHANGELOG.md"
   ],
   "scripts": {

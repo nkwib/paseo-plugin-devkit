@@ -1,8 +1,12 @@
 export * from "./testing.ts";
 export { PaseoWeb, parseViewport } from "./web.ts";
-export { daemonUp, daemonDown, daemonStatus, readDaemon, requireDaemon } from "./daemon.ts";
+export { daemonUp, daemonDown, daemonStatus, installFakeAgent, readDaemon, requireDaemon } from "./daemon.ts";
 export type { DaemonRecord } from "./daemon.ts";
 export { installPlugin } from "./install.ts";
 export { assertSafeHome, assertSafePort, REAL_DAEMON_PORT, SafetyError } from "./safety.ts";
 export { lintOverview } from "./registry/overview.ts";
 export { precheck } from "./registry/precheck.ts";
+export { createPlugin, TEMPLATES } from "./create.ts";
+export type { CreateOptions, CreateResult, Template } from "./create.ts";
+export { agentTimeline, FAKE_AGENT_DIR, FAKE_AGENT_ID, fakeAgentPrompt, pluginRows, runFakeAgentTurn, sendFakeAgentTurn } from "./fake-agent.ts";
+export type { FakeScript, FakeStep, TimelineRow, TurnOptions, TurnResult } from "./fake-agent.ts";

@@ -50,7 +50,7 @@ tsconfig node types, an @types/node ~22 pin, .gitignore, vitest with a host-cont
                 use file:/path/to/clone for a local checkout)
   --paseo BIN   Paseo CLI for \`plugin init\` (default: PASEO_BIN, PATH, the desktop app)
   --no-init     skip \`paseo plugin init\` and use the built-in base`,
-  daemon: `ppd daemon up [--port N] [--name N] [--workspace DIR] [--web-dist DIR] [--caffeinate] [--paseo BIN]
+  daemon: `ppd daemon up [--port N] [--name N] [--workspace DIR] [--fake-agent] [--web-dist DIR] [--caffeinate] [--paseo BIN]
 ppd daemon down [--name N] [--keep-home]
 ppd daemon status [--name N] [--json] [--all]
 
@@ -60,6 +60,8 @@ UI on and relay, MCP and speech off. State lives in ~/.local/state/paseo-plugin-
   --port N         port to listen on (6767 is refused)
   --name N         run several daemons side by side (default: "default")
   --workspace DIR  create a workspace for DIR after startup
+  --fake-agent     install the credential-free "fake-agent" provider: each prompt that is a JSON script
+                   ({"steps":[{"write":{...}},{"mcp":{...}},{"say":"..."}]}) runs as a deterministic turn
   --web-dist DIR   Paseo web UI build (default: the desktop app's app-dist)
   --caffeinate     keep a Mac awake while the daemon runs
   --paseo BIN      Paseo CLI to use (default: PASEO_BIN, PATH, the desktop app)
@@ -265,6 +267,7 @@ async function daemon(args: string[]): Promise<number> {
       "web-dist": { type: "string" },
       workspace: { type: "string" },
       caffeinate: { type: "boolean" },
+      "fake-agent": { type: "boolean" },
     });
     await daemonUp({
       name: values.name,
@@ -273,6 +276,7 @@ async function daemon(args: string[]): Promise<number> {
       webDist: values["web-dist"],
       workspace: values.workspace ? resolve(values.workspace) : undefined,
       caffeinate: values.caffeinate,
+      fakeAgent: values["fake-agent"],
     });
     return 0;
   }

@@ -1,0 +1,6 @@
+{
+  "id": "fake-agent",
+  "name": "Fake agent",
+  "description": "Credential-free scripted agent provider for end-to-end tests of agent-facing plugins (paseo-plugin-devkit).",
+  "requirements": { "paseo": ">=0.11.2" }
+}
