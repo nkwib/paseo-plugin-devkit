@@ -24,6 +24,26 @@ export function newLogLines(output: string, seen: Set<string>): string[] {
   return fresh;
 }
 
+/**
+ * Stops a self-triggering reload loop (a plugin or build step writing into the watched folder): after `max` reloads
+ * within `windowMs`, changes are ignored until `windowMs` has passed. Returns false for a reload it holds back.
+ */
+export function reloadLimiter(max = 8, windowMs = 20_000): (now: number) => boolean {
+  let recent: number[] = [];
+  let pausedUntil = 0;
+  return (now) => {
+    if (now < pausedUntil) return false;
+    recent = recent.filter((at) => now - at < windowMs);
+    if (recent.length >= max) {
+      pausedUntil = now + windowMs;
+      recent = [];
+      return false;
+    }
+    recent.push(now);
+    return true;
+  };
+}
+
 export interface DevOptions {
   name?: string;
   id?: string;
@@ -74,6 +94,7 @@ export async function devLoop(pluginDir: string, options: DevOptions = {}): Prom
   await cycle(`installing ${id} into ${daemon.url}`);
   let timer: NodeJS.Timeout | null = null;
   const changed = new Set<string>();
+  const allowReload = reloadLimiter();
   const watcher = watch(dir, { recursive: true }, (_event, file) => {
     const path = file ? String(file) : "";
     if (!path || isIgnoredChange(path)) return;
@@ -82,6 +103,10 @@ export async function devLoop(pluginDir: string, options: DevOptions = {}): Prom
     timer = setTimeout(() => {
       const files = [...changed];
       changed.clear();
+      if (!allowReload(Date.now())) {
+        log(`--- too many reloads in a row (last change: ${files.slice(0, 3).join(", ")}): something keeps writing into ${dir}; ignoring changes for 20 s`);
+        return;
+      }
       void cycle(`reloading: ${files.slice(0, 3).join(", ")}${files.length > 3 ? ` and ${files.length - 3} more` : ""}`);
     }, options.debounceMs ?? 300);
   });

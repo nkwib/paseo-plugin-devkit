@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { isIgnoredChange, newLogLines } from "../src/dev.ts";
+import { isIgnoredChange, newLogLines, reloadLimiter } from "../src/dev.ts";
 import { cliErrorMessage } from "../src/install.ts";
 
 describe("ppd dev", () => {
+  it("holds back a self-triggering reload loop, then resumes", () => {
+    const allow = reloadLimiter(3, 1000);
+    expect([0, 100, 200].map(allow)).toEqual([true, true, true]);
+    expect(allow(300)).toBe(false);
+    expect(allow(900)).toBe(false);
+    expect(allow(1301)).toBe(true);
+  });
+
   it("ignores dependency, VCS, build and editor changes", () => {
     for (const path of ["node_modules/x/index.js", ".git/index", "dist/server.js", "src/.index.ts.swp", "index.ts~", "a/.cache/b"]) {
       expect(isIgnoredChange(path), path).toBe(true);
