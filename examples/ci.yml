@@ -17,8 +17,8 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
@@ -37,15 +37,15 @@ jobs:
     env:
       PASEO_SOURCE: ${{ github.workspace }}/paseo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: plugin
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: getpaseo/paseo
           ref: main
           path: paseo
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm
