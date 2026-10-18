@@ -45,12 +45,14 @@ With two workspaces, `ppd web` needs `--workspace` to know which one to open; pa
 
 For every prompt, in order:
 
-1. The whole prompt is JSON (it starts with a brace or a bracket): an object with a `steps` array, or a bare array of
-   steps. It must parse; an invalid script fails the turn with `fake-agent: invalid script: ...`.
-2. The prompt contains a fenced block whose language is `fake-agent`. Its body is the script, so the script can sit
+1. The prompt contains a fenced block whose language is `fake-agent`. Its body is the script, so the script can sit
    inside a longer prompt.
+2. The whole prompt is JSON (it starts with a brace or a bracket): an object with a `steps` array, or a bare array of
+   steps.
 3. The agent's cwd has a `.fake-agent.json`: turn N runs its Nth script (see [several turns](#turns)).
 4. Otherwise the agent answers with one message: `fake-agent received: <prompt>`.
+
+A script from the prompt must parse; an invalid one fails the turn with `fake-agent: invalid script: ...`.
 
 <h2 id="steps">Steps</h2>
 
@@ -175,7 +177,8 @@ fake-agent refused to run this command: bash steps with run: true work only in a
 <h2 id="mcp">MCP steps</h2>
 
 An `mcp` step sends `initialize`, `notifications/initialized` and `tools/call` to the named server from the session
-config, over HTTP (JSON or event-stream responses) or stdio, with a 10 s timeout per request. The tool's `result` is
+config, over HTTP (JSON or event-stream responses) or stdio, with a 10 s timeout per HTTP request or for the whole stdio
+exchange. The tool's `result` is
 the tool call's `output`.
 
 - `"server": "*"` calls the tool on every configured server, one tool call each. With none configured it does

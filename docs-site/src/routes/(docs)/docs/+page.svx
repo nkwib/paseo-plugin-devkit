@@ -66,7 +66,8 @@ check, a guard or one command:
 | Hermes checks | `react-native` as a devDependency of the plugin (it ships `hermesc` and the Hermes VM), or `HERMESC` and `HERMES`. |
 | `android` | `adb` (Android platform-tools) and the Paseo app on the phone. |
 
-`ppd doctor` reports all of these in one go.
+`ppd doctor` reports most of these in one go. It does not look for the Hermes VM, and it warns about a missing
+Chrome even when a Playwright Chromium is installed.
 
 <h2 id="install">Install</h2>
 

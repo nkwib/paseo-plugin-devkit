@@ -26,8 +26,8 @@ client: the app would not evaluate this plugin's client, so none of its UI appea
 ```
 
 The daemon installed the plugin and its server runs, but the app would refuse the client bundle, so no panel,
-screen or Command Center item shows up anywhere, and Paseo itself says nothing. `ppd install` and `ppd dev` exit 1.
-Each line under `client:` is a registration rule the app enforces, for example:
+screen or Command Center item shows up anywhere, and Paseo itself says nothing. `ppd install` exits 1; `ppd dev`
+prints the same lines and keeps watching. Each line under `client:` is a registration rule the app enforces, for example:
 
 - `Unknown Lucide icon: X`: the app's Lucide build has no icon named X.
 - `Command Center item X has no icon`, `Workspace panel X has invalid context`, `Screen X is not a component`.
@@ -39,7 +39,7 @@ Fix the line, save, and `ppd dev` re-checks on reload. `ppd check` reports the s
 <h3 id="logs">Where the logs are</h3>
 
 - Plugin output (`console.log` in server code, load and stop lines): `npx ppd paseo -- plugin logs <plugin id>`.
-  `ppd install` and `ppd dev` print the new lines after each install or reload.
+  `ppd install` prints the plugin log; `ppd dev` prints the new lines after each reload.
 - The daemon's own output: `daemon.out` in the dev home that `ppd daemon status` prints.
 - The browser console: `ppd web` prints console errors after every run.
 
@@ -58,7 +58,7 @@ build options. That is expected on Linux CI. On a Mac, install Paseo or point `P
 <h3 id="layout">could not load Paseo's plugin compiler</h3>
 
 ```text
-FAIL  paseo-compile    could not load Paseo's plugin compiler from the Paseo 0.12.0 app: expected ... ppd was verified on Paseo 0.11.4 and found 0.12.0, so this release may lay things out differently. Use `ppd check --approx` ...
+FAIL  paseo-compile    could not load Paseo's plugin compiler from the Paseo 0.12.0 app (/Applications/Paseo.app): expected ... ppd was verified on Paseo 0.11.4 and found 0.12.0, so this release may lay things out differently. Run `ppd check --approx` for the esbuild replica, or set PASEO_SOURCE to a getpaseo/paseo checkout. Please report it at ...
 ```
 
 ppd reads the compiler, the evaluator and the Lucide list from inside the installed app, which is not a public API.
@@ -80,10 +80,12 @@ them, only `hermes-class` (no `class` syntax) guards the phone.
 
 ```text
 ... did not finish within 30 s (an infinite loop or a blocking call at load or in contribute?)
+... did not finish within 120 s (an infinite loop or a blocking call at load or in contribute?)
 ```
 
-Plugin code runs in a child process with a 30 s limit. A blocking loop at module load or in `contribute` ends
-here. `plugin code called process.exit(N)` means what it says: the host would
+Plugin code runs in a child process with a time limit: 30 s for the client, and for the server on the
+approximation; with the app or a checkout the server is evaluated inside the compile step, which has 120 s. A
+blocking loop at module load or in `contribute` ends here. `plugin code called process.exit(N)` means what it says: the host would
 lose the whole plugin process. A timer or server left running after the cleanup is a warning, not a failure.
 
 <h2 id="daemon">Dev daemon</h2>
@@ -94,7 +96,7 @@ lose the whole plugin process. A timer or server left running after the cleanup 
 no running dev daemon "default": run `ppd daemon up` first
 ```
 
-`install`, `dev`, `paseo`, `web` and `android` need a daemon. With `--name N` on `daemon up`, pass the same
+`install`, `dev`, `paseo`, `web` and `android` (without `--port`) need a daemon. With `--name N` on `daemon up`, pass the same
 `--name N` to the others. A record whose process is gone is cleaned up by the next `ppd daemon up`.
 
 <h3 id="ports">Ports</h3>

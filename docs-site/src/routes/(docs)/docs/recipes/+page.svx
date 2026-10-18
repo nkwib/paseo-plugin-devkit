@@ -14,7 +14,7 @@ Each recipe is a whole plugin, verified on a dev daemon with the commands on its
 that is checked: pages read it from the repository at build time.
 </p>
 
-- **[Timeline renderer](/docs/recipes/timeline-renderer)**: a card under every agent turn that touched files, and a
+- **[Timeline renderer](/docs/recipes/timeline-renderer)**: a card under every agent turn that used tools, and a
   screen listing all turns. Uses `server.on("agent.turn_ended")`, `timeline.append`, `addTimelineRenderer`,
   `addScreen` and an RPC.
 - **[Settings screen](/docs/recipes/settings)**: a settings screen whose values the server reads when a turn ends.

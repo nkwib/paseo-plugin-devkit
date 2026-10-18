@@ -16,7 +16,7 @@ Dev daemon:
 
 Host contract:
 
-- `ppd check`, `paseo-plugin-devkit/testing` and `paseo-plugin-devkit/vitest`: compile and evaluate with the installed Paseo app's own compiler and evaluator (or a `PASEO_SOURCE` checkout), else an esbuild replica labeled `APPROXIMATION` (`--approx` forces it). Plugin code runs in child processes with a 30 s timeout, so a hang or `process.exit` fails; the returned cleanup is called and handles left open are warnings. Also: the app's client registration rules, manifest rules from Paseo's schema, Lucide icon names from the app, Hermes class syntax, parse and VM smoke run, bundle sizes, import boundaries, dependency placement and an RPC budget helper.
+- `ppd check`, `paseo-plugin-devkit/testing` and `paseo-plugin-devkit/vitest`: compile and evaluate with the installed Paseo app's own compiler and evaluator (or a `PASEO_SOURCE` checkout), else an esbuild replica labeled `APPROXIMATION` (`--approx` forces it). Plugin code runs in child processes with a time limit, so a hang or `process.exit` fails; the returned cleanup is called and handles left open are warnings. Also: the app's client registration rules, manifest rules from Paseo's schema, Lucide icon names from the app, Hermes class syntax, parse and VM smoke run, bundle sizes, import boundaries, dependency placement and an RPC budget helper.
 
 Agent-facing plugins:
 

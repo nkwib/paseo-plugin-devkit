@@ -46,7 +46,7 @@ It exits 1 on any `FAIL`; warnings and skips do not fail. All flags are on [Comm
 | `paseo-compile` | Paseo's own `compilePlugin` accepts the plugin. Compile errors carry file:line:col. |
 | `client-requires` | The client bundle requires only modules the app provides: the SDK, `react`, `react-native`, `react/jsx-runtime`, `zod`, `@tanstack/react-query`. Gesture handler, reanimated, safe-area, SVG, Lucide and DOM packages are not available to plugins. |
 | `server-requires` | The server bundle requires only host modules and Node built-ins; any other bare require would resolve from Paseo's install, not your plugin. |
-| `server-eval` | Paseo's evaluator runs the server contribution in a child process with a 30 s timeout (Paseo's init timeout) and lists the RPCs it registered. The returned cleanup is called; handles it leaves open (servers, timers) are warnings. A `process.exit`, a hang or a missing cleanup function fails. |
+| `server-eval` | The server contribution runs in a child process and the RPCs it registered are listed: with the app or a checkout, Paseo's own evaluator runs it inside the compile step (120 s limit); on the approximation, a replica runs it with a 30 s limit. The returned cleanup is called; handles it leaves open (servers, timers) are warnings. A `process.exit`, a hang or a missing cleanup function fails. |
 | `client-eval` | The client contribution runs in a child process against stub host modules and the app's registration rules: ids, contexts, titles, callbacks, components, duplicates, icons, the cleanup function, and methods the app's client context does not have. Any violation fails, because the app then drops the whole client. |
 | `hermes-class` | No `class` syntax in the client bundle: it crashes plugin loading on Hermes, the phone JavaScript engine. |
 | `hermes-parse` | `hermesc` compiles the client bundle. Skipped without `hermesc`. |
@@ -123,7 +123,8 @@ adds a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and runs the r
 <Callout kind="warn" title="Limits">
 
 Client evaluation and the Hermes run use stub host modules, not the real app: they catch load-time failures, not
-rendering bugs. Use [`ppd web`](/docs/getting-started#web) and a [phone](/docs/android) for those. Evaluation
-timeouts are fixed (30 s per bundle, 120 s for the real compile).
+rendering bugs. Use [`ppd web`](/docs/getting-started#web) and a [phone](/docs/android) for those. Time limits are
+30 s per evaluated bundle and 120 s for the real compile with the server evaluation inside it. The CLI has no flag
+for them; `runChecks` and `describeHostContract` take `evalTimeoutMs` and `compileTimeoutMs`.
 
 </Callout>

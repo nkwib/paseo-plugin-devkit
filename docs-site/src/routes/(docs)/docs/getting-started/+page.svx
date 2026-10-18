@@ -160,7 +160,8 @@ plugin evaluation errors: none
 
 `ppd web` drives Chrome through Playwright: it opens the workspace, runs a Command Center item, clicks elements by
 their accessible name, and prints console errors and any plugin client the app failed to evaluate (that one exits 1).
-`--viewport 390x844` shows the compact (phone) layout and `--headed` keeps the browser open. On a real phone:
+`--viewport 390x844` shows the compact (phone) layout and `--headed` shows the browser, which stays open when there
+is no `--shot`. On a real phone:
 [Testing on a phone](/docs/android).
 
 <h2 id="stop">6. Stop</h2>

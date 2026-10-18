@@ -145,7 +145,7 @@ Every command has `ppd <command> --help`.
 | --- | --- |
 | Compile | Paseo's own `compilePlugin`, from the installed app or `PASEO_SOURCE`; an esbuild replica (labeled `APPROXIMATION`) only when neither is found. Compile errors carry file:line:col. |
 | Client modules | Bundle requires only host-provided modules; no gesture handler, reanimated, safe-area or Lucide imports. |
-| Server bundle | Requires only host modules and Node built-ins; evaluated in a child process with Paseo's evaluator and a 30 s timeout (Paseo's init timeout); registered RPCs listed; the returned cleanup is called and handles it leaves open (servers, timers) are warnings. A `process.exit` or a hang fails. |
+| Server bundle | Requires only host modules and Node built-ins; evaluated in a child process (Paseo's evaluator inside the 120 s compile step with the app or a checkout, a replica with a 30 s limit on the approximation); registered RPCs listed; the returned cleanup is called and handles it leaves open (servers, timers) are warnings. A `process.exit` or a hang fails. |
 | Client eval | Factory runs in a child process against stub host modules, with the app's registration rules: ids, contexts, callbacks, duplicates, icons, cleanup. Any violation fails, because the app then drops the whole client. |
 | Hermes | No class syntax; `hermesc` parse and a smoke run in the Hermes VM when the binaries are found. |
 | Icons | Every contribution icon exists in the app's Lucide set (read from the app bundle). |
@@ -213,8 +213,8 @@ const cards = pluginRows(agentTimeline(agentId), "turn-summary"); // plugin rows
 
 - Port 6767 is refused everywhere (daemon, android), and so is any home overlapping `~/.paseo` or a non-temp `PASEO_HOME`.
 - Dev homes are created under `$TMPDIR` (`os.tmpdir()`, a `/var/folders/...` path on macOS, not `/tmp`), must sit strictly inside a temp dir and carry a marker file. Only marked homes are ever deleted, including the home of a daemon that died.
-- The dev daemon and every Paseo CLI call get a scrubbed env: inherited `PASEO_*` variables (`PASEO_HOME`, `PASEO_AGENT_ID`, `PASEO_CLI`, ...) are dropped, so running `ppd` inside a Paseo agent cannot reach the parent daemon.
-- Every Paseo CLI call gets `--home <dev home>`; `--host` and `--home` passthrough are rejected.
+- The dev daemon and every Paseo CLI call aimed at it get a scrubbed env: inherited `PASEO_*` variables (`PASEO_HOME`, `PASEO_AGENT_ID`, `PASEO_CLI`, ...) are dropped (the daemon keeps only `PASEO_NODE_ENV`), so running `ppd` inside a Paseo agent cannot reach the parent daemon.
+- Every Paseo CLI call aimed at a dev daemon gets `--home <dev home>` (only `paseo --version` and `paseo plugin init` run without it); `--host` and `--home` passthrough are rejected.
 - `daemon down` signals a pid only if its command line carries that dev home.
 - `android` never sends input, never presses BACK or HOME and never changes settings. It refuses to guess between several devices.
 - `release` and `registry update` print commands by default; public actions need a TTY confirmation or `--yes`.
@@ -262,13 +262,13 @@ Verified on macOS with Paseo 0.11.4 (desktop app and CLI). CI runs on Linux with
 | Accessible names in the web UI ("New workspace", "Open menu", "Workspace actions", "Search commands") | `ppd web`, `PaseoWeb` | a timeout names the label it waited for. |
 | Rules vendored from Paseo (client registration, manifest schema, build options) | `ppd check` without the app | drift shows up in the weekly CI job against Paseo main. |
 
-`ppd doctor` and `ppd daemon up` print a note when the installed Paseo is not the verified version.
+`ppd daemon up` prints a note when the installed Paseo is not the verified version; `ppd doctor` shows the same text as a warning on its `paseo CLI` line.
 
 ## Limitations
 
 - **Stubbed:** client eval and the Hermes smoke run use stub host modules, not the real app. They catch load-time failures, not rendering bugs. Use `ppd web` and a device for those.
 - Without the Paseo app or `PASEO_SOURCE` (Linux CI) the compile is an approximation and icon names are checked only against the plugin's own `lucide-react-native`, if any.
-- Evaluation timeouts are fixed (30 s per bundle, 120 s for the real compile); there is no CLI flag yet.
+- Time limits are 30 s per evaluated bundle and 120 s for the real compile, server evaluation included. There is no CLI flag; `runChecks` and `describeHostContract` take `evalTimeoutMs` and `compileTimeoutMs`.
 - The 32 MiB relay budget comes from field experience, not from Paseo source; direct connections allow 100 MiB.
 - `ppd web` needs Google Chrome or a Playwright Chromium matching `playwright-core`. Its selectors follow the Paseo 0.11 web UI and may need updates when the app changes.
 - No iOS command: the simulator build is manual (see the skill). No multi-touch injection for Android.

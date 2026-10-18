@@ -31,7 +31,7 @@ PASS  client-eval      contributions: addTimelineRenderer, addScreen
 13 passed, 0 warnings, 0 failed, 0 skipped
 
  Test Files  2 passed (2)
-      Tests  15 passed (15)
+      Tests  15 passed | 1 skipped (16)
 ```
 
 <h2 id="data">The row</h2>

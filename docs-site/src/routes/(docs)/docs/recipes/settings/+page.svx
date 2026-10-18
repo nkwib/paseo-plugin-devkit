@@ -13,7 +13,7 @@
 # Settings screen
 
 <p class="lede">
-<code>turn-alerts</code> logs a line when an agent turn ends, for failed turns only or for every turn. The choice
+<code>turn-alerts</code> logs a line when an agent turn ends, for failed or canceled turns only, or for every turn. The choice
 lives in a settings screen in the app, and the server reads it on every turn.
 </p>
 

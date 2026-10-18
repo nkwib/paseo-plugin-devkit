@@ -231,7 +231,7 @@ export function hostLoadFailure(host: PaseoHost): string {
   );
 }
 
-/** Compiling dv-sized plugins takes seconds; evaluation inside gets the host's 30 s on top. */
+/** Compiling a large plugin takes seconds. The server evaluation runs in the same child, under this limit. */
 export const DEFAULT_COMPILE_TIMEOUT_MS = 120_000;
 
 async function runHostCompile(command: string, args: string[], options: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs: number }): Promise<PaseoCompileResult> {
