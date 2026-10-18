@@ -22,7 +22,8 @@ export {
 } from "./check/bundle.ts";
 export type { ClientEvaluation, ClientEvaluationOptions, Handler, ServerEvaluation } from "./check/bundle.ts";
 export { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./check/hermes.ts";
-export { appIconNames, hostIconNames, lucideIconNames, staticIconNames } from "./check/lucide.ts";
+export { appIconNames, hostIconNames, iconListProblem, lucideIconNames, staticIconNames } from "./check/lucide.ts";
+export { layoutMismatch, VERIFIED_PASEO } from "./compat.ts";
 export { assertWithinRpcBudget, measureRpc, responseBytes } from "./check/budget.ts";
 export type { RpcBudget, RpcMeasurement } from "./check/budget.ts";
 export { checkClient, runChecks, formatResults } from "./check/index.ts";

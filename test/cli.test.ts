@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CLI, scratch } from "./helpers.ts";
+import { CLI, ROOT, scratch } from "./helpers.ts";
 
 const ppd = (...args: string[]) =>
   spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { ...process.env, PPD_STATE_DIR: scratch("ppd-cli-state-") } });
@@ -21,6 +23,11 @@ describe("ppd CLI guards", () => {
     const result = ppd("android", "up", "--port", "6767");
     expect(result.status).toBe(3);
     expect(result.stderr).toMatch(/refusing port 6767/);
+  });
+
+  it("prints its version", () => {
+    const { version } = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as { version: string };
+    expect(ppd("--version").stdout.trim()).toBe(version);
   });
 
   it("prints help and rejects unknown commands", () => {

@@ -1,51 +1,35 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 (2026-10-18)
 
-Breaking (library API):
+First public release. Verified on macOS with Paseo 0.11.4.
 
-- `evaluateClientBundle(bundle, dir, options)` takes an options object (`{ settleMs, icons }`) instead of a positional `settleMs`.
-- `installPlugin` is async and returns `action`, `clientErrors` and `clientNotes`; `status` can be `client-rejected`.
+Dev daemon:
 
-Changed:
-
-- Plugin code that `ppd check` runs never sees the caller's `PASEO_*` variables (agent id, CLI, real home), in every compile and evaluation mode.
-- The fake agent runs `bash` steps with `run: true` (from a prompt or `.fake-agent.json`) only in a daemon `ppd daemon up` started; anywhere else the step fails the turn without running.
-- `ppd web` and status probes use the URL built from the checked port; a state record whose URL disagrees is refused.
-- `ppd dev` pauses for 20 s after 8 reloads within 20 s, so a plugin or build writing into its own folder cannot reload forever.
-- `ppd check` compiles, evaluates and checks icons with the installed Paseo app (app.asar) by default. Order: `PASEO_SOURCE`, the app (`--paseo-app`, `PASEO_APP`, the app behind `paseo`, `/Applications`), then the esbuild replica, now labeled `APPROXIMATION`. `--approx` forces it.
-- Plugin code runs in child processes with a 30 s timeout; a hang, an infinite loop or `process.exit` fails instead of hanging `ppd` or passing. The contribution's cleanup is called and handles left open are warnings.
-- Client evaluation applies the app's registration rules (ids, contexts, callbacks, duplicates, icons, cleanup). A violation fails, because the app drops the whole client.
-- Manifest rules follow Paseo's schema: `$`-prefixed keys such as `paseo plugin init`'s `$comment` are accepted, `requirements` is strict, `build` must be argv arrays, unknown keys warn.
-- Approx-mode drift fixed: lib-boundary imports, compile errors with file:line:col.
-- `ppd install` reloads (same directory) or replaces an installed id, checks the client and reports `client-rejected` (exit 1). Defaults to cwd.
-- `ppd web` reports plugin clients the app failed to evaluate and exits 1.
-- `ppd install --git` and `ppd registry submit|update` support plugins in a repo subfolder.
-- `ppd release` checks the remote (origin, tag, `git push --dry-run`) before committing and tagging; a rerun after a failed push resumes.
-
-Added:
-
-- `ppd create <dir> [--template panel|agent-hook]`: wraps `paseo plugin init` (built-in base without it) and adds tsconfig node types, an `@types/node` ~22 pin, `.gitignore`, vitest with a host-contract suite, `npm run check|test|dev` and a README. The output passes `ppd check` and installs as is. `panel` is the hello-plugin panel and RPC; `agent-hook` appends a timeline card on `agent.turn_ended`, with a renderer that opens a screen.
-- `ppd daemon up --fake-agent`: installs a credential-free, scripted provider plugin (`assets/fake-agent`) for e2e tests of agent-facing plugins. JSON turn scripts: `say`, `think`, `write`, `edit`, `bash`, `mcp` (calls tools on injected MCP servers), `sleep`, `fail`.
-- Library: `createPlugin`, `runFakeAgentTurn`, `sendFakeAgentTurn`, `agentTimeline` (plugin rows included, read through the app's client), `pluginRows`, `fakeAgentPrompt`, `installFakeAgent`.
-- `ppd dev [dir]`: install, then reload on every change, re-check the client and stream plugin logs.
-
-Fixed:
-
-- `ppd daemon up`: inherited `PASEO_*` variables (`PASEO_AGENT_ID`, `PASEO_CLI`, ...) no longer reach the dev daemon or CLI calls; an explicit `--paseo` or `--web-dist` that does not exist is an error; a busy port exits 1 (not the safety code 3); a different `--port` for a running daemon is an error; a dead daemon's home is removed.
-- `ppd registry precheck`: no crash on malformed media or JSON; a video may come first in `media`.
-- `ppd registry update`: rerun with identical content reuses the branch.
-
-## 0.1.0 (unreleased)
-
-First release.
-
-- `ppd daemon up|down|status`, `ppd install`, `ppd paseo --`: isolated dev daemon in a temp home with safety guards (port 6767 and `~/.paseo` are refused, only marked homes are deleted, only pids carrying the dev home are signalled).
-- `ppd web`: Playwright page object for the Paseo web UI; screenshots at any viewport, Command Center items and clicks by accessible name.
-- `ppd android up|down|status`: `adb reverse` to the dev daemon with read-only device checks.
+- `ppd daemon up|down|status`: a detached Paseo daemon in a fresh home under `$TMPDIR` on a free port (7800-7899), with plugins and the web UI on and relay, MCP and speech off. Port 6767 and `~/.paseo` are refused, only homes carrying the `.ppd-home` marker are deleted, only pids whose command line carries the dev home are signalled, and inherited `PASEO_*` variables never reach the daemon or CLI calls. `--workspace`, `--fake-agent`, `--caffeinate`, `--port`, `--name`.
+- `ppd install [dir]`: installs a plugin, reloads it (same directory) or replaces an installed id, and checks the client against the app's registration rules: a client the app would drop is reported as `client-rejected` (exit 1). `--git` installs committed HEAD through the manifest `build`, also from a repo subfolder.
+- `ppd dev [dir]`: install, then reload on every change, re-check the client and stream plugin logs. Pauses when something keeps writing into the plugin folder.
+- `ppd paseo -- <args>`: any Paseo CLI call against the dev daemon.
+- `ppd web` and the `PaseoWeb` page object (`paseo-plugin-devkit/web`): screenshots at any viewport, Command Center items and clicks by accessible name; reports console errors and plugin clients the app failed to evaluate (exit 1).
+- `ppd android up|down|status`: `adb reverse` to the dev daemon, with read-only device checks.
 - `ppd doctor`: toolchain report.
-- `ppd check`, `paseo-plugin-devkit/testing` and `/vitest`: host-contract checks (real compiler with `PASEO_SOURCE`, server and client evaluation, host module lists, Hermes, Lucide icons, bundle sizes, RPC budget).
-- `ppd registry precheck|update|submit` and `ppd release`.
-- `examples/hello-plugin`: a minimal plugin (server RPC plus workspace panel) that passes every check; the test suite uses it.
-- Claude Code skill `paseo-plugin-dev`.
-- `ppd <command> --help` for every command; bad options point at that help.
+
+Host contract:
+
+- `ppd check`, `paseo-plugin-devkit/testing` and `paseo-plugin-devkit/vitest`: compile and evaluate with the installed Paseo app's own compiler and evaluator (or a `PASEO_SOURCE` checkout), else an esbuild replica labeled `APPROXIMATION` (`--approx` forces it). Plugin code runs in child processes with a 30 s timeout, so a hang or `process.exit` fails; the returned cleanup is called and handles left open are warnings. Also: the app's client registration rules, manifest rules from Paseo's schema, Lucide icon names from the app, Hermes class syntax, parse and VM smoke run, bundle sizes, import boundaries, dependency placement and an RPC budget helper.
+
+Agent-facing plugins:
+
+- `ppd daemon up --fake-agent` installs a credential-free provider plugin that runs a scripted turn per prompt. Steps: `say`, `think`, `write`, `edit`, `bash`, `mcp` (calls tools on the MCP servers plugins inject), `sleep`, `fail`. `bash` with `run: true` executes only in a daemon `ppd daemon up` started.
+- Library: `runFakeAgentTurn`, `sendFakeAgentTurn`, `agentTimeline` (plugin rows included), `pluginRows`, `fakeAgentPrompt`, `installFakeAgent`.
+
+Start and ship:
+
+- `ppd create <dir> [--template panel|agent-hook]`: wraps `paseo plugin init` (built-in base without it) and adds tsconfig node types, an `@types/node` ~22 pin, `.gitignore`, vitest with a host-contract suite, `npm run check|test|dev` and a README. The result passes `ppd check` and installs as is.
+- `ppd registry precheck|update|submit` and `ppd release` (checks the remote before committing and tagging; a rerun after a failed push resumes).
+- `examples/hello-plugin`, `examples/ci.yml` and the Claude Code skill `paseo-plugin-dev`.
+
+Compatibility and licensing:
+
+- When the installed Paseo does not look like 0.11.4 (app bundle layout, daemon start, web UI labels), errors name what was expected, the verified and found versions, and the workaround. `ppd doctor` and `ppd daemon up` note a different Paseo version. `ppd --version`.
+- Files adapted from Paseo (Apache-2.0) carry per-file notices, and `THIRD_PARTY_NOTICES` ships in the package. The package license is `MIT AND Apache-2.0`.

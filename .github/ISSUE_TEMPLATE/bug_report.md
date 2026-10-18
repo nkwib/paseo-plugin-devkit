@@ -12,4 +12,4 @@ $ ppd ...
 
 **Expected**
 
-**Environment**: `ppd doctor` output (paths are shortened to `~`), OS, Paseo version.
+**Environment**: `ppd --version`, `ppd doctor` output (paths are shortened to `~`), OS, Paseo version.

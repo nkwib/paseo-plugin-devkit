@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write # npm Trusted Publishing and provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Verify tag matches package.json version
+        run: |
+          pkg_version="v$(node -p "require('./package.json').version")"
+          tag="${GITHUB_REF#refs/tags/}"
+          if [ "$tag" != "$pkg_version" ]; then
+            echo "Tag $tag does not match package.json version $pkg_version" >&2
+            exit 1
+          fi
+      - name: Package contents
+        run: node .github/scripts/check-package.mjs
+      - name: Update npm for Trusted Publishing support
+        run: npm install -g npm@latest
+      # Trusted Publishing (OIDC) needs no secret. NPM_TOKEN is only a fallback for a first publish made before
+      # the trusted publisher is configured on npmjs.com; delete the secret afterwards.
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

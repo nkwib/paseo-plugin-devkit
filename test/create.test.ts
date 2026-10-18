@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { runChecks } from "../src/check/index.ts";
 import { createPlugin, displayName, TEMPLATES, type Template } from "../src/create.ts";
 import { findPaseoBin } from "../src/paseo.ts";
+import { DEVKIT_VERSION } from "../src/version.ts";
 import { scratch } from "./helpers.ts";
 
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
@@ -26,7 +27,7 @@ describe("ppd create", () => {
 
     const pkg = json(join(dir, "package.json"));
     expect(pkg.scripts).toMatchObject({ check: "ppd check", test: "vitest run", typecheck: "tsc --noEmit", dev: "ppd dev" });
-    expect(pkg.devDependencies).toMatchObject({ "@types/node": "~22.20.5", "paseo-plugin-devkit": "github:nkwib/paseo-plugin-devkit" });
+    expect(pkg.devDependencies).toMatchObject({ "@types/node": "~22.20.5", "paseo-plugin-devkit": `^${DEVKIT_VERSION}` });
     expect(pkg.devDependencies.vitest).toBeTruthy();
     expect(json(join(dir, "tsconfig.json")).compilerOptions.types).toEqual(["react", "node"]);
     expect(readFileSync(join(dir, ".gitignore"), "utf8")).toContain("node_modules/");

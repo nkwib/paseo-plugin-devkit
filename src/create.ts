@@ -16,12 +16,13 @@ import { findPaseoBin, paseoVersion } from "./paseo.ts";
 import { run } from "./proc.ts";
 import { devDaemonEnv } from "./safety.ts";
 import { UsageError } from "./usage.ts";
+import { DEVKIT_VERSION } from "./version.ts";
 
 export const TEMPLATES = ["panel", "agent-hook"] as const;
 export type Template = (typeof TEMPLATES)[number];
 
-/** Where `npm install` gets the devkit from. It is not on npm; pass --devkit for a local clone (`file:...`). */
-export const DEFAULT_DEVKIT_SPEC = "github:nkwib/paseo-plugin-devkit";
+/** Where `npm install` gets the devkit from: the npm release this ppd belongs to. --devkit overrides it. */
+export const DEFAULT_DEVKIT_SPEC = `^${DEVKIT_VERSION}`;
 /** SDK version for the built-in base when there is no Paseo CLI to ask. */
 export const FALLBACK_PASEO_VERSION = "0.11.4";
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;

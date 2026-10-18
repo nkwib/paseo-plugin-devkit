@@ -7,12 +7,12 @@ description: Start, verify, test, release and publish Paseo plugins safely. Use 
 
 The plugin API itself (contributions, RPCs, hooks, UI components) lives in getpaseo/paseo's `public-docs/plugins/` and its `skills/paseo-plugin` skill. This skill covers what those leave out: verifying a plugin on real hosts without touching the user's Paseo, the runtime limits nobody documents, and shipping it.
 
-Tooling: the `ppd` CLI from `paseo-plugin-devkit`, run as `npx ppd <command>`. It is not on npm: install it as a devDependency with `npm install -D github:nkwib/paseo-plugin-devkit` (needs read access to the repo) or `npm install -D <path to a clone>`. `ppd --help` lists commands, `ppd <command> --help` shows options. `examples/hello-plugin` in the devkit repo is a minimal plugin that passes every check.
+Tooling: the `ppd` CLI from the `paseo-plugin-devkit` npm package. In a plugin repo, install it with `npm install -D paseo-plugin-devkit` and run `npx ppd <command>`. Outside one, run `npx --package paseo-plugin-devkit ppd <command>`: a bare `npx ppd` resolves to an unrelated npm package named `ppd` and fails. `ppd --help` lists commands, `ppd <command> --help` shows options. `examples/hello-plugin` in the package is a minimal plugin that passes every check.
 
 ## Start a plugin
 
-1. `npx ppd create /absolute/path/to/plugin [--template panel|agent-hook]`, then `cd` there and `npm install`. `panel` (default) is a workspace panel, a Command Center item and one RPC. `agent-hook` is `server.on("agent.turn_ended")` appending a timeline card, plus the card renderer and a screen it opens. Done when `npm run check` has 0 FAIL and `npm test` passes; the output does both before any edit.
-2. Without access to the private devkit repo, pass `--devkit file:<path to a clone>` (the default is `github:nkwib/paseo-plugin-devkit`).
+1. `npx --package paseo-plugin-devkit ppd create /absolute/path/to/plugin [--template panel|agent-hook]`, then `cd` there and `npm install`. `panel` (default) is a workspace panel, a Command Center item and one RPC. `agent-hook` is `server.on("agent.turn_ended")` appending a timeline card, plus the card renderer and a screen it opens. Done when `npm run check` has 0 FAIL and `npm test` passes; the output does both before any edit.
+2. The new package.json depends on the devkit release that created it (`^<version>` from npm). To use an unreleased devkit, pass `--devkit file:<path to a clone>`.
 3. What create adds over `paseo plugin init`, so keep it when restructuring: `"node"` in tsconfig `types` (server `node:*` imports fail tsc without it), the `@types/node` ~22 pin (26.x broke installs on Paseo <= 0.11.4, getpaseo/paseo#7145), `.gitignore`, vitest with `test/host-contract.test.ts`. The agent-hook template also pins `@getpaseo/client` and `@getpaseo/protocol` (SDK peer dependencies that type hook events and `PaseoApi`) to the SDK version, so installers that skip peers (yarn v1, `--legacy-peer-deps`) still type them.
 4. Timeline renderers get no navigation props. To open a screen or panel from a card, close over the `client` passed to `contribute` (the agent-hook template's `makeSummaryCard(client)` shows it).
 

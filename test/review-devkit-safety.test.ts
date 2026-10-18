@@ -1,6 +1,6 @@
-// Repro tests from the review-next lane, third pass (devkit safety). `it.fails` documents a confirmed gap and passes
-// while it exists; plain `it` pins a bypass attempt that the guards already stop. Nothing here starts a daemon,
-// binds a port, or points at the real ~/.paseo: homes are fake (HomeContext) and records name a scratch state dir.
+// Safety regression tests from a review of the devkit's guards. Each one pins a bypass attempt that the guards
+// stop. Nothing here starts a daemon, binds a port, or points at the real ~/.paseo: homes are fake (HomeContext)
+// and records name a scratch state dir.
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

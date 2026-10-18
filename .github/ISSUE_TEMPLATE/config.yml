@@ -1,1 +1,8 @@
 blank_issues_enabled: true
+contact_links:
+  - name: Bug in Paseo itself
+    url: https://github.com/getpaseo/paseo/issues
+    about: The daemon, the app or the plugin host misbehaves without ppd involved. paseo-plugin-devkit is an unofficial project.
+  - name: Security issue
+    url: https://github.com/nkwib/paseo-plugin-devkit/security/advisories/new
+    about: Report privately, not in a public issue (see SECURITY.md).

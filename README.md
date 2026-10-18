@@ -1,10 +1,14 @@
 # paseo-plugin-devkit
 
-![License: MIT](https://img.shields.io/badge/license-MIT-blue) ![Node >= 22.18](https://img.shields.io/badge/node-%3E%3D22.18-brightgreen) ![Status: 0.1.0 preview](https://img.shields.io/badge/status-0.1.0%20preview-orange)
+[![CI](https://github.com/nkwib/paseo-plugin-devkit/actions/workflows/ci.yml/badge.svg)](https://github.com/nkwib/paseo-plugin-devkit/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/paseo-plugin-devkit)](https://www.npmjs.com/package/paseo-plugin-devkit) ![Node >= 22.18](https://img.shields.io/badge/node-%3E%3D22.18-brightgreen) ![License: MIT AND Apache-2.0](https://img.shields.io/badge/license-MIT%20AND%20Apache--2.0-blue)
+
+> **[Docs site](https://paseo-plugin-devkit.pages.dev/)** · **[Getting started](https://paseo-plugin-devkit.pages.dev/docs/getting-started)** · **[Commands](https://paseo-plugin-devkit.pages.dev/docs/commands)** · **[Fake agent](https://paseo-plugin-devkit.pages.dev/docs/fake-agent)** · **[Safety model](https://paseo-plugin-devkit.pages.dev/docs/safety)**
 
 **Test, verify and ship [Paseo](https://github.com/getpaseo/paseo) plugins without touching your real Paseo.**
 
 `ppd` is a CLI, a set of vitest helpers and a Claude Code skill. One command gives you an isolated dev daemon, another checks your plugin against the host's undocumented runtime contract, others drive the web UI, an Android phone, releases and the registry.
+
+An unofficial community project, not affiliated with or endorsed by the Paseo team.
 
 ## Why
 
@@ -17,7 +21,29 @@ Built while shipping a real plugin (a PDF and Office viewer). Each of these cost
 
 ## Quick start
 
-Requires Node 22.18+ and, for the daemon commands, the Paseo CLI (the desktop app ships it). Not on npm yet.
+Requires Node 22.18+ and, for the daemon commands, the Paseo CLI (the desktop app ships it).
+
+**Start a new plugin:**
+
+```sh
+npx --package paseo-plugin-devkit ppd create ~/code/my-plugin    # panel template: workspace panel + one RPC
+cd ~/code/my-plugin && npm install
+npm run check && npm test                                         # ppd check, unit tests, host-contract suite
+npx ppd daemon up --workspace ~/code/my-plugin                    # isolated dev daemon
+npx ppd dev                                                       # install, reload on every change
+npx ppd daemon down
+```
+
+`--template agent-hook` gives a `turn_ended` hook with a timeline card instead; start its daemon with `--fake-agent`. Inside the plugin, `npx ppd` runs the devkit that `create` added as a devDependency. Outside a project, always write `npx --package paseo-plugin-devkit ppd ...`: the npm name `ppd` belongs to an unrelated package.
+
+`ppd create` runs `paseo plugin init` (SDK versions matching your Paseo) and adds what init leaves out: tsconfig `node` types, an `@types/node` ~22 pin, `.gitignore`, vitest, `npm run check`, a README. The result passes `ppd check` and installs as is. The devkit dependency is the npm release that created the plugin (`^0.1.0`); pass `--devkit file:/path/to/clone` for a local checkout.
+
+**Add it to an existing plugin:**
+
+```sh
+npm install -D paseo-plugin-devkit
+npx ppd check                                     # plugin in cwd
+```
 
 **Try it on the bundled example plugin:**
 
@@ -34,26 +60,6 @@ npx ppd daemon up --workspace /tmp/demo-workspace
 npx ppd install examples/hello-plugin    # rerun after edits, or: npx ppd dev examples/hello-plugin
 npx ppd web --command "Open Hello panel" --click Greet --shot out/hello.png
 npx ppd daemon down
-```
-
-**Start a new plugin:**
-
-```sh
-npx ppd create ~/code/my-plugin                          # panel template: workspace panel + one RPC
-npx ppd create ~/code/turn-cards --template agent-hook  # turn_ended hook + timeline card
-cd ~/code/my-plugin && npm install
-npm run check && npm test                                # ppd check, unit tests, host-contract suite
-npx ppd daemon up --workspace /tmp/demo-workspace        # agent-hook: add --fake-agent
-npx ppd dev                                              # install, reload on every change
-```
-
-`ppd create` runs `paseo plugin init` (SDK versions matching your Paseo) and adds what init leaves out: tsconfig `node` types, an `@types/node` ~22 pin, `.gitignore`, vitest, `npm run check`, a README. The result passes `ppd check` and installs as is. The devkit dependency defaults to `github:nkwib/paseo-plugin-devkit`; pass `--devkit file:/path/to/clone` for a local checkout.
-
-**Add it to an existing plugin:**
-
-```sh
-npm install -D github:nkwib/paseo-plugin-devkit   # the repo is private for now: needs read access
-npx ppd check                                     # plugin in cwd
 ```
 
 `ppd check` compiles and evaluates with the installed Paseo app's own compiler and evaluator, and checks icon names against the app's Lucide set (both read from `Paseo.app/Contents/Resources/app.asar`). Order: `PASEO_SOURCE` (a [getpaseo/paseo](https://github.com/getpaseo/paseo) checkout with `npm ci` done, to test against unreleased Paseo), then the app (`--paseo-app`, `PASEO_APP`, the app behind `paseo` on PATH, `/Applications/Paseo.app`), then an esbuild replica. Replica results are labeled `APPROXIMATION`; `--approx` forces it.
@@ -236,7 +242,24 @@ Or for one plugin repo: copy the same directory into the repo's `.claude/skills/
 - run: npx ppd registry precheck
 ```
 
-It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and runs `ppd check` with the latest SDK, so upstream changes break your CI before they break your users. This repo's own [CI](.github/workflows/ci.yml) runs typecheck, tests and both checks on `examples/hello-plugin` on Node 22 and 24.
+It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and runs `ppd check` with the latest SDK, so upstream changes break your CI before they break your users. This repo's own [CI](.github/workflows/ci.yml) runs typecheck, tests, a CLI smoke test and a package check on Node 22 and 24, builds the docs site, and runs the test suite weekly against Paseo main.
+
+## Compatibility
+
+Verified on macOS with Paseo 0.11.4 (desktop app and CLI). CI runs on Linux without Paseo, where daemon tests skip and `ppd check` runs as an approximation.
+
+`ppd` relies on parts of Paseo that are not a public API. When one of them moves in a new Paseo release, `ppd` says what it expected instead of blaming your plugin:
+
+| Relies on | Used by | When it changes |
+| --- | --- | --- |
+| `compiler.js`, `bundle-evaluator.js`, `manifest.js` in `Paseo.app/Contents/Resources/app.asar/node_modules/@getpaseo/server/dist/server/server/plugins` | `ppd check` (real compile and server evaluation) | `paseo-compile` fails with "could not load Paseo's plugin compiler", the expected path, and the verified and found versions. `ppd check --approx` or `PASEO_SOURCE` works around it. |
+| The Lucide exports in the app's web bundle (`app-dist/_expo/static/js/web/index-*.js`) | icon checks | `lucide-icons` warns and falls back to the plugin's own `lucide-react-native`. |
+| `@getpaseo/client` and `ws` inside `app.asar` | `agentTimeline` | the call fails naming the modules it looked for. |
+| `paseo daemon run --home`, `PASEO_HOME`, `PASEO_LISTEN` and the `config.json` keys | `ppd daemon up` | a start failure prints the daemon output and how it was started. |
+| Accessible names in the web UI ("New workspace", "Open menu", "Workspace actions", "Search commands") | `ppd web`, `PaseoWeb` | a timeout names the label it waited for. |
+| Rules vendored from Paseo (client registration, manifest schema, build options) | `ppd check` without the app | drift shows up in the weekly CI job against Paseo main. |
+
+`ppd doctor` and `ppd daemon up` print a note when the installed Paseo is not the verified version.
 
 ## Limitations
 
@@ -248,13 +271,12 @@ It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and run
 - No iOS command: the simulator build is manual (see the skill). No multi-touch injection for Android.
 - `ppd release` and `ppd registry update` are tested against local Git repos and a stub validator, not yet end to end against GitHub and the live registry.
 - The daemon end-to-end tests are opt-in (`PPD_E2E=1 npm test`, `PPD_E2E_PORT` to pin the port) because CI has no Paseo CLI.
-- macOS and Linux only. Tested on macOS with Paseo 0.11.4.
+- macOS and Linux only. Tested on macOS with Paseo 0.11.4 (see [Compatibility](#compatibility)).
 
 ## Roadmap
 
 Devkit:
 
-- Publish to npm.
 - `ppd ios` for the simulator.
 - A fake-host harness for RPC integration tests.
 - A provider template for `ppd create`.

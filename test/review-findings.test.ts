@@ -1,4 +1,4 @@
-// Confirmed bugs and host-contract drift from the 2026-10-17 deep review, all fixed. Each test states the
+// Confirmed bugs and host-contract drift found in a 2026-10-17 review, all fixed. Each test states the
 // correct behavior and stays as a regression test.
 import { spawnSync } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -65,7 +65,7 @@ describe("ppd check runs plugin code in its own process", () => {
     expect(results.find((result) => result.id === "client-eval")).toMatchObject({ status: "fail", message: expect.stringMatching(/did not finish within 2 s/) });
   });
 
-  it("calls the cleanup and warns about a server left listening (probe-bridge: check hung on plugins that start a server)", async () => {
+  it("calls the cleanup and warns about a server left listening (check used to hang on plugins that start a server)", async () => {
     const dir = variant({
       "index.server.ts": [
         "server.handle(greetRpc, ({ name }) => greet(name));\n  return () => {};",

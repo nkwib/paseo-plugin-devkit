@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 6 * * 1" # weekly: the paseo-main job catches upstream drift
   workflow_dispatch:
 
 permissions:
@@ -12,22 +13,59 @@ permissions:
 
 jobs:
   test:
+    name: test (node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         node: ["22", "24"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      # No Paseo CLI or app on the runner: daemon and app tests skip, `ppd check` runs as a labeled APPROXIMATION.
       - run: npm test
       - run: npm run build
-      - run: node dist/cli.js check examples/hello-plugin
-      - run: node dist/cli.js registry precheck examples/hello-plugin
+      - name: CLI smoke test
+        run: |
+          node dist/cli.js --version
+          node dist/cli.js --help | grep -q "never port 6767"
+          node dist/cli.js check examples/hello-plugin
+          node dist/cli.js registry precheck examples/hello-plugin
+          # The real daemon's port is refused with the safety exit code before anything starts.
+          set +e
+          node dist/cli.js daemon up --port 6767
+          code=$?
+          set -e
+          test "$code" = "3"
+      - name: Package contents
+        run: node .github/scripts/check-package.mjs
+
+  docs-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            docs-site/package-lock.json
+      - run: npm ci
+      - working-directory: docs-site
+        run: npm ci
+      - name: Commands reference matches `ppd --help`
+        working-directory: docs-site
+        run: |
+          npm run gen:commands
+          git diff --exit-code -- src/lib/commands.json
+      - working-directory: docs-site
+        run: npm run build
 
   paseo-main:
     name: tests against Paseo main
@@ -36,15 +74,15 @@ jobs:
     env:
       PASEO_SOURCE: ${{ github.workspace }}/paseo
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: devkit
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: getpaseo/paseo
           ref: main
           path: paseo
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: npm

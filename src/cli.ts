@@ -7,11 +7,13 @@ import { formatInstall, installPlugin } from "./install.ts";
 import { runPaseo } from "./paseo.ts";
 import { parsePort, SafetyError } from "./safety.ts";
 import { UsageError } from "./usage.ts";
+import { DEVKIT_VERSION } from "./version.ts";
 
 const HELP = `ppd: dev kit for Paseo plugin authors
 
 Usage: ppd <command> [options]
        ppd <command> --help      options for one command
+       ppd --version
 
 Start
   create <dir>            new plugin from a template (panel, agent-hook) that passes check
@@ -46,7 +48,7 @@ tsconfig node types, an @types/node ~22 pin, .gitignore, vitest with a host-cont
                 agent-hook: server.on("agent.turn_ended") appends a timeline card; client renderer + screen
   --id ID       manifest id (default: the directory name)
   --name NAME   display name (default: from the id)
-  --devkit SPEC package.json spec for paseo-plugin-devkit (default: github:nkwib/paseo-plugin-devkit;
+  --devkit SPEC package.json spec for paseo-plugin-devkit (default: ^${DEVKIT_VERSION}, this release on npm;
                 use file:/path/to/clone for a local checkout)
   --paseo BIN   Paseo CLI for \`plugin init\` (default: PASEO_BIN, PATH, the desktop app)
   --no-init     skip \`paseo plugin init\` and use the built-in base`,
@@ -175,6 +177,11 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   switch (command) {
+    case "--version":
+    case "-v":
+    case "version":
+      console.log(DEVKIT_VERSION);
+      return 0;
     case undefined:
     case "help":
     case "--help":
