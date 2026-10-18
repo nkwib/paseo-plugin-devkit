@@ -119,13 +119,18 @@ export function paseoArgsForHome(args: readonly string[], home: string): string[
 export const PASEO_ENV_PASSTHROUGH = new Set(["PASEO_NODE_ENV"]);
 
 /**
- * Environment for any child process that talks to a dev daemon. Inherited PASEO_* variables are dropped: run
- * from an agent inside Paseo, they name the caller's agent, CLI and host, and must not leak into the test daemon.
+ * `base` without the caller's Paseo session: run from an agent inside Paseo, PASEO_* variables name the caller's
+ * agent, CLI, host and real home. `keep` lists the ones a child may still see.
  */
-export function devDaemonEnv(base: NodeJS.ProcessEnv, home: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+export function withoutPaseoEnv(base: NodeJS.ProcessEnv, keep: ReadonlySet<string> = new Set()): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(base)) {
-    if (!key.startsWith("PASEO_") || PASEO_ENV_PASSTHROUGH.has(key)) env[key] = value;
+    if (!key.startsWith("PASEO_") || keep.has(key)) env[key] = value;
   }
-  return { ...env, PASEO_HOME: home, ...extra };
+  return env;
+}
+
+/** Environment for any child process that talks to a dev daemon: no inherited Paseo session, PASEO_HOME pinned. */
+export function devDaemonEnv(base: NodeJS.ProcessEnv, home: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  return { ...withoutPaseoEnv(base, PASEO_ENV_PASSTHROUGH), PASEO_HOME: home, ...extra };
 }

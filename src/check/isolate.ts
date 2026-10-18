@@ -5,6 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { withoutPaseoEnv } from "../safety.ts";
 
 /** Paseo gives a plugin process 30 s to initialize (server runtime.ts); evaluation gets the same. */
 export const DEFAULT_EVAL_TIMEOUT_MS = 30_000;
@@ -52,10 +53,14 @@ export interface ChildOutcome {
   stderr: string;
 }
 
-/** Spawns a child and waits for it, killing its process group after `timeoutMs`. */
+/**
+ * Spawns a child and waits for it, killing its process group after `timeoutMs`. The child runs plugin code, so it
+ * never sees the caller's Paseo session (PASEO_*), whatever `env` the caller passes.
+ */
 export function runChild(command: string, args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv; timeoutMs: number }): Promise<ChildOutcome> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: options.cwd, env: options.env ?? process.env, stdio: ["ignore", "ignore", "pipe"], detached: true });
+    const env = withoutPaseoEnv(options.env ?? process.env);
+    const child = spawn(command, args, { cwd: options.cwd, env, stdio: ["ignore", "ignore", "pipe"], detached: true });
     let stderr = "";
     let timedOut = false;
     child.stderr!.on("data", (chunk: Buffer) => {

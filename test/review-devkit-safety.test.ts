@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { evaluateIsolated } from "../src/check/isolate.ts";
+import { evaluateIsolated, runChild } from "../src/check/isolate.ts";
 import { requireDaemon } from "../src/daemon.ts";
 import { assertSafeHome, parsePort, SafetyError, type HomeContext } from "../src/safety.ts";
 
@@ -48,7 +48,7 @@ describe("review-devkit-safety: guards that hold", () => {
 });
 
 describe("review-devkit-safety: gaps", () => {
-  it.fails("ppd check does not hand inherited PASEO_* variables to the plugin code it evaluates", async () => {
+  it("ppd check does not hand inherited PASEO_* variables to the plugin code it evaluates", async () => {
     // Stand-ins for what an agent running inside Paseo inherits; neither names the real daemon here.
     process.env.PASEO_HOME = "/tmp/ppd-review-fake-caller-home";
     process.env.PASEO_LISTEN = "127.0.0.1:7846";
@@ -59,6 +59,16 @@ describe("review-devkit-safety: gaps", () => {
     const outcome = await evaluateIsolated("server", bundle, scratchDir("ppd-review-plugin-"));
     expect(outcome.ok).toBe(true);
     expect(outcome.ok && "handlers" in outcome.result ? outcome.result.handlers : null).toEqual(["none"]);
+  }, 60_000);
+
+  it("runChild drops PASEO_* even from an env the caller passes (host compile path)", async () => {
+    const script = `process.stderr.write(Object.keys(process.env).filter((key) => key.startsWith("PASEO_")).join(",") || "none")`;
+    const outcome = await runChild(process.execPath, ["-e", script], {
+      cwd: tmpdir(),
+      env: { PATH: process.env.PATH, PASEO_HOME: "/tmp/ppd-review-fake-caller-home", PASEO_AGENT_ID: "a1", ELECTRON_RUN_AS_NODE: "1" },
+      timeoutMs: 30_000,
+    });
+    expect(outcome.stderr).toBe("none");
   }, 60_000);
 
   it.fails("the fake agent (bash run: true) refuses to register outside a ppd-created home", async () => {

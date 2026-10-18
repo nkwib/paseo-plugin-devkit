@@ -201,7 +201,6 @@ export async function compileWithHost(pluginDir: string, host: PaseoHost, timeou
     return runHostCompile(join(host.root, "node_modules/.bin/tsx"), [SCRIPT, plugins, ".ts", resolve(pluginDir)], { cwd: host.root, timeoutMs });
   }
   const env: NodeJS.ProcessEnv = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
-  for (const key of Object.keys(env)) if (key.startsWith("PASEO_")) delete env[key];
   return runHostCompile(host.helper, [SCRIPT, join(host.resources, APP_PLUGINS), ".js", resolve(pluginDir)], { env, timeoutMs });
 }
 
