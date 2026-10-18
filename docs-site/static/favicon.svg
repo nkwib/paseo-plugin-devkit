@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>
+    .b { stroke: #14191c; }
+    .a { stroke: #0f766e; }
+    @media (prefers-color-scheme: dark) {
+      .b { stroke: #f2f4f5; }
+      .a { stroke: #2dd4bf; }
+    }
+  </style>
+  <path class="a" d="M12.5 3.5v5M19.5 3.5v5" stroke-width="2.2" stroke-linecap="round" />
+  <rect class="b" x="8" y="8.5" width="16" height="11" rx="3.2" stroke-width="2" />
+  <path class="a" d="M12.5 14l2.4 2.4 4.6-4.8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+  <path class="b" d="M16 19.5v2.5a5 5 0 0 0 5 5h6" stroke-width="2" stroke-linecap="round" />
+</svg>

@@ -1,0 +1,81 @@
+<script>
+  import Callout from '#lib/components/Callout.svelte';
+  import PageMeta from '#lib/components/PageMeta.svelte';
+  import SourceFile from '#lib/components/SourceFile.svelte';
+</script>
+
+<PageMeta
+  title="Server hooks"
+  description="A server-only Paseo plugin that injects an MCP server into every new agent with before('agent.create') and logs every finished turn, tested end to end with the fake agent's mcp step."
+/>
+
+# Server hooks
+
+<p class="lede">
+<code>word-tools</code> has no UI. It runs a small MCP server, hands it to every new agent through
+<code>before("agent.create")</code>, and logs how each turn ended. The fake agent calls the injected tool, so the
+whole path is testable without a real agent.
+</p>
+
+<h2 id="plugin">The plugin</h2>
+
+A `before` hook gets the request and returns the request to use, or `undefined` to keep it. Spread the existing
+`mcpServers`: the user and other plugins add servers too. An `on` hook only observes, and runs on the daemon even
+when no app is open.
+
+<SourceFile path="docs-site/recipes/server-hooks/index.server.ts" />
+
+The MCP server is plain `node:http`, so the plugin has no runtime dependencies: Streamable HTTP with JSON responses,
+enough for `initialize`, `tools/list` and `tools/call`. It listens on a free loopback port without authentication.
+
+<SourceFile path="docs-site/recipes/server-hooks/server/mcp-server.ts" />
+
+<SourceFile path="docs-site/recipes/server-hooks/paseo-plugin.json" />
+
+<h2 id="run">Run it</h2>
+
+```sh
+mkdir -p /tmp/ws
+npx ppd daemon up --fake-agent
+npx ppd install path/to/recipes/server-hooks
+npx ppd paseo -- run --provider fake-agent --cwd /tmp/ws '{"steps":[{"mcp":{"server":"words","tool":"count_words","arguments":{"text":"one two three"}}},{"say":"done"}]}'
+npx ppd paseo -- logs <agent id>
+npx ppd paseo -- plugin logs word-tools
+```
+
+The agent called the tool on the server the plugin injected:
+
+```text
+[User] {"steps":[{"mcp":{"server":"words","tool":"count_words","arguments":{"text":"one two three"}}},{"say":"done"}]}
+[mcp__words__count_words] {"server":"words","tool":"count_words","arguments":{"text":"one two three"}}
+done
+```
+
+and the turn hook logged the outcome:
+
+```text
+2026-10-18T08:20:44.812Z  stdout    turn completed for fake-agent agent 8769edf1-d1cf-47ed-a17e-e672d0140dbf
+```
+
+The tool's result is in the canonical timeline (read with `agentTimeline`), as the tool call's `output`:
+
+```json
+{"type":"tool_call","callId":"m-1-0-0","name":"mcp__words__count_words","detail":{"type":"unknown","input":{"server":"words","tool":"count_words","arguments":{"text":"one two three"}},"output":{"content":[{"type":"text","text":"3 words"}]}},"status":"completed","error":null}
+```
+
+<Callout kind="tip" title="Without knowing the server name">
+
+`"server": "*"` calls the tool on every MCP server in the session config, which shows what an agent actually
+received. See [MCP steps](/docs/fake-agent#mcp).
+
+</Callout>
+
+<h2 id="test">Test it</h2>
+
+```ts
+import { agentTimeline, runFakeAgentTurn } from "paseo-plugin-devkit";
+
+const turn = runFakeAgentTurn([{ mcp: { server: "words", tool: "count_words", arguments: { text: "one two three" } } }], { cwd: workspace });
+const [call] = agentTimeline(turn.agentId).filter((row) => row.type === "tool_call");
+expect(call).toMatchObject({ status: "completed", detail: { output: { content: [{ type: "text", text: "3 words" }] } } });
+```

@@ -1,0 +1,16 @@
+{
+  "name": "turn-alerts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Docs recipe: a settings screen whose values the server reads when a turn ends.",
+  "devDependencies": {
+    "@getpaseo/plugin": "0.11.4",
+    "@types/node": "~22.20.5",
+    "@types/react": "~19.2.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "~5.9.3",
+    "zod": "^4.4.3"
+  }
+}

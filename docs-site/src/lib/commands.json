@@ -1,0 +1,97 @@
+{
+  "source": "ppd --help and ppd help <command>",
+  "versionToken": "{{version}}",
+  "top": "ppd: dev kit for Paseo plugin authors\n\nUsage: ppd <command> [options]\n       ppd <command> --help      options for one command\n       ppd --version\n\nStart\n  create <dir>            new plugin from a template (panel, agent-hook) that passes check\n\nDev daemon (isolated: temp home, never port 6767, never ~/.paseo)\n  daemon up|down|status   start, stop or inspect an isolated dev daemon\n  install [dir]           install or reload a plugin in the dev daemon\n  dev [dir]               install, then reload on every change and stream plugin logs\n  paseo -- <args...>      run the Paseo CLI against the dev daemon\n  web                     open the web UI in Chrome, screenshot, click through\n  android up|down|status  adb reverse to the dev daemon (read-only device checks)\n  doctor                  toolchain report\n\nHost contract\n  check [dir]             compile, evaluate and lint a plugin against the host contract\n\nRelease and registry (user-run)\n  release <bump>          bump, changelog, tag, push, GitHub release\n  registry <sub>          precheck, update or submit a registry listing\n\nDocs: https://github.com/nkwib/paseo-plugin-devkit",
+  "sections": [
+    {
+      "title": "Start",
+      "note": null,
+      "commands": [
+        {
+          "topic": "create",
+          "usage": "ppd create <dir>",
+          "summary": "new plugin from a template (panel, agent-hook) that passes check",
+          "help": "ppd create <dir> [--template panel|agent-hook] [--id ID] [--name NAME] [--devkit SPEC] [--paseo BIN] [--no-init]\n\nCreates a plugin in dir (missing or empty) that passes `ppd check` and installs as is. The base comes from\n`paseo plugin init` (SDK versions matching your Paseo), else a built-in copy of the same layout. Added on top:\ntsconfig node types, an @types/node ~22 pin, .gitignore, vitest with a host-contract suite, npm scripts\n(check, test, dev, typecheck) and a README.\n\n  --template T  panel (default): workspace panel + Command Center item + one RPC (the devkit's hello-plugin)\n                agent-hook: server.on(\"agent.turn_ended\") appends a timeline card; client renderer + screen\n  --id ID       manifest id (default: the directory name)\n  --name NAME   display name (default: from the id)\n  --devkit SPEC package.json spec for paseo-plugin-devkit (default: ^{{version}}, this release on npm;\n                use file:/path/to/clone for a local checkout)\n  --paseo BIN   Paseo CLI for `plugin init` (default: PASEO_BIN, PATH, the desktop app)\n  --no-init     skip `paseo plugin init` and use the built-in base"
+        }
+      ]
+    },
+    {
+      "title": "Dev daemon",
+      "note": "isolated: temp home, never port 6767, never ~/.paseo",
+      "commands": [
+        {
+          "topic": "daemon",
+          "usage": "ppd daemon up|down|status",
+          "summary": "start, stop or inspect an isolated dev daemon",
+          "help": "ppd daemon up [--port N] [--name N] [--workspace DIR] [--fake-agent] [--web-dist DIR] [--caffeinate] [--paseo BIN]\nppd daemon down [--name N] [--keep-home]\nppd daemon status [--name N] [--json] [--all]\n\nStarts a detached Paseo daemon in a fresh home under $TMPDIR on a free port (7800-7899), with plugins and the web\nUI on and relay, MCP and speech off. State lives in ~/.local/state/paseo-plugin-devkit (PPD_STATE_DIR).\n\n  --port N         port to listen on (6767 is refused)\n  --name N         run several daemons side by side (default: \"default\")\n  --workspace DIR  create a workspace for DIR after startup\n  --fake-agent     install the credential-free \"fake-agent\" provider: each prompt that is a JSON script\n                   ({\"steps\":[{\"write\":{...}},{\"mcp\":{...}},{\"say\":\"...\"}]}) runs as a deterministic turn\n  --web-dist DIR   Paseo web UI build (default: the desktop app's app-dist)\n  --caffeinate     keep a Mac awake while the daemon runs\n  --paseo BIN      Paseo CLI to use (default: PASEO_BIN, PATH, the desktop app)\n  --keep-home      down: keep the temp home for inspection\n  --all            status: list every recorded daemon"
+        },
+        {
+          "topic": "install",
+          "usage": "ppd install [dir]",
+          "summary": "install or reload a plugin in the dev daemon",
+          "help": "ppd install [dir] [--git] [--id ID] [--name N]\n\nInstalls the plugin in dir (default: cwd) into the dev daemon and prints its status and logs. An id that is\nalready configured is reloaded (same directory) or replaced, so rerun it after every edit. The client is\nchecked against the app's registration rules (icons, ids, contexts, cleanup): the app drops a client that\nbreaks them with only a console warning. Exits 1 unless the plugin is running and its client passes.\n\n  --git     install the committed HEAD through the manifest build, like a registry install\n  --id ID   plugin id to install as (default: manifest id, plus \"-git\" with --git)\n  --name N  target dev daemon"
+        },
+        {
+          "topic": "dev",
+          "usage": "ppd dev [dir]",
+          "summary": "install, then reload on every change and stream plugin logs",
+          "help": "ppd dev [dir] [--id ID] [--name N]\n\nInstalls the plugin in dir (default: cwd) into the dev daemon, then watches dir: every change reloads the\nplugin (`paseo plugin reload`), re-checks the client against the app's registration rules and prints the\nresult. New plugin log lines stream as they appear. Ctrl+C stops watching; the plugin stays installed.\nChanges under node_modules, dist and dot directories are ignored.\n\n  --id ID   plugin id to install as (default: manifest id)\n  --name N  target dev daemon"
+        },
+        {
+          "topic": "paseo",
+          "usage": "ppd paseo -- <args...>",
+          "summary": "run the Paseo CLI against the dev daemon",
+          "help": "ppd paseo [--name N] -- <args...>\n\nRuns the Paseo CLI against the dev daemon. --home is always appended; --home and --host are refused.\nExample: ppd paseo -- plugin logs hello-plugin"
+        },
+        {
+          "topic": "web",
+          "usage": "ppd web",
+          "summary": "open the web UI in Chrome, screenshot, click through",
+          "help": "ppd web [--shot FILE] [--viewport WxH] [--command TEXT] [--click LABEL]... [options]\n\nOpens the dev daemon's web UI in Chrome (Playwright), opens the only workspace (or --workspace), runs the\nsteps in order and prints console errors.\n\n  --shot FILE         save a screenshot\n  --viewport WxH      e.g. 390x844; widths under 768 get the compact (phone) layout with touch\n  --command TEXT      select a Command Center item by its exact title\n  --click LABEL       click an element by its accessible name (repeatable)\n  --workspace ID      workspace id, name or path\n  --path /route       open an app route instead of a workspace\n  --wait MS           settle time before the screenshot (default 1500)\n  --full-page         full-page screenshot\n  --headed            show the browser\n  --name N            target dev daemon"
+        },
+        {
+          "topic": "android",
+          "usage": "ppd android up|down|status",
+          "summary": "adb reverse to the dev daemon (read-only device checks)",
+          "help": "ppd android up|down|status [--serial S] [--name N] [--port N]\n\nup: adb reverse tcp:<port> so a phone running the Paseo app reaches the dev daemon as localhost:<port>.\ndown: removes the reverse rule. status: device state (screen, lock, foreground app) and reverse rules.\nNever sends input or key events and never changes settings. Refuses to guess between several devices.\n\n  --serial S  device serial (required when several are attached)\n  --name N    dev daemon whose port to reverse\n  --port N    reverse this port instead of a dev daemon's (6767 is refused)"
+        },
+        {
+          "topic": "doctor",
+          "usage": "ppd doctor",
+          "summary": "toolchain report",
+          "help": "ppd doctor [--json]\n\nReports Node, the Paseo CLI, the web UI build, PASEO_SOURCE, a browser, Hermes, adb, Xcode, git, gh, free\ndisk and running dev daemons. Read-only. Exits 1 only when something required is missing."
+        }
+      ]
+    },
+    {
+      "title": "Host contract",
+      "note": null,
+      "commands": [
+        {
+          "topic": "check",
+          "usage": "ppd check [dir]",
+          "summary": "compile, evaluate and lint a plugin against the host contract",
+          "help": "ppd check [dir] [--json] [--paseo-app APP] [--paseo-source DIR] [--approx] [--max-client-kb N] [--max-server-kb N]\n\nHost-contract checks on the plugin in dir (default: cwd): manifest, import boundaries, dependencies,\ncompile, server and client evaluation (in child processes, 30 s timeout), the app's registration rules,\nHermes, Lucide icon names, bundle size. Exits 1 on any FAIL.\n\nThe compiler and icon list come from, in order: --paseo-source / PASEO_SOURCE (a Paseo checkout), the\ninstalled Paseo app (--paseo-app / PASEO_APP, the app behind `paseo` on PATH, /Applications/Paseo.app),\nelse an esbuild approximation, labeled APPROXIMATION in the output.\n\n  --paseo-app APP     Paseo.app to compile with (default: discovered)\n  --paseo-source DIR  Paseo checkout with node_modules (default: PASEO_SOURCE); wins over the app\n  --approx            force the approximation (what CI without Paseo sees)\n  --max-client-kb N   client bundle budget (default 2048)\n  --max-server-kb N   server bundle budget (default 32768)\n  --json              machine-readable results"
+        }
+      ]
+    },
+    {
+      "title": "Release and registry",
+      "note": "user-run",
+      "commands": [
+        {
+          "topic": "release",
+          "usage": "ppd release <bump>",
+          "summary": "bump, changelog, tag, push, GitHub release",
+          "help": "ppd release <patch|minor|major|X.Y.Z> [--dry-run] [--yes] [--dir DIR] [--skip-precheck]\n\nBumps package.json, writes a CHANGELOG.md section (from commits if missing), commits, tags, pushes and\ncreates a GitHub release. Refuses without a TTY unless --yes.\n\n  --dry-run        print the plan and commands, change nothing\n  --yes            skip the confirmation prompt\n  --dir DIR        plugin directory (default: cwd)\n  --skip-precheck  do not block on registry precheck errors"
+        },
+        {
+          "topic": "registry",
+          "usage": "ppd registry <sub>",
+          "summary": "precheck, update or submit a registry listing",
+          "help": "ppd registry precheck [dir] [--json]\nppd registry update [dir] --registry DIR [--tag vX.Y.Z] [--id owner/slug] [--yes]\nppd registry submit [dir]\n\nprecheck  what the registry reviewer would bounce: OVERVIEW.md lint, media and icon, lockfile, build,\n          listing files committed. Exits 1 on errors.\nupdate    record-edit branch in your getpaseo/plugins fork for a Git release, runs the registry validator,\n          prints push and PR commands (--yes runs them).\nsubmit    prints the prefilled submission form URL. Submit it in a browser: CLI-created issues miss the\n          submission label."
+        }
+      ]
+    }
+  ]
+}

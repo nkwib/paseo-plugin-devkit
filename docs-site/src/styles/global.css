@@ -1,0 +1,187 @@
+@import './tokens.css';
+@import './prism.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--c-text);
+  background: var(--c-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  scroll-behavior: smooth;
+  scroll-padding-top: calc(var(--header-h) + var(--sp-4));
+}
+
+body {
+  margin: 0;
+  background: var(--c-bg);
+  min-height: 100vh;
+}
+
+a {
+  color: var(--c-accent);
+  text-decoration: none;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: color 120ms ease;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+p {
+  margin: 0 0 var(--sp-4);
+  color: var(--c-text);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5 {
+  margin: 0 0 var(--sp-3);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--c-text);
+}
+
+h1 {
+  font-size: var(--fs-3xl);
+  letter-spacing: -0.035em;
+}
+
+h2 {
+  font-size: var(--fs-xl);
+  margin-top: var(--sp-7);
+  padding-top: var(--sp-2);
+  letter-spacing: -0.025em;
+}
+
+h3 {
+  font-size: var(--fs-lg);
+  margin-top: var(--sp-6);
+}
+
+h4 {
+  font-size: var(--fs-md);
+  margin-top: var(--sp-5);
+}
+
+ul,
+ol {
+  margin: 0 0 var(--sp-4);
+  padding-left: var(--sp-5);
+}
+
+li {
+  margin: var(--sp-2) 0;
+}
+
+li::marker {
+  color: var(--c-text-subtle);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--c-border);
+  margin: var(--sp-6) 0;
+}
+
+blockquote {
+  border-left: 3px solid var(--c-accent);
+  background: var(--c-bg-alt);
+  margin: var(--sp-5) 0;
+  padding: var(--sp-3) var(--sp-5);
+  color: var(--c-text-muted);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Inline code */
+:not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--c-bg-alt);
+  border: 1px solid var(--c-border);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--r-sm);
+  color: var(--c-text);
+  /* Long paths and commands wrap instead of widening the page on phones. */
+  overflow-wrap: break-word;
+}
+
+a code {
+  color: var(--c-accent);
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--sp-5) 0;
+  font-size: var(--fs-sm);
+}
+
+th,
+td {
+  text-align: left;
+  padding: var(--sp-3);
+  border-bottom: 1px solid var(--c-border);
+  vertical-align: top;
+}
+
+th {
+  font-weight: 600;
+  color: var(--c-text);
+  background: var(--c-bg-alt);
+}
+
+td code,
+th code {
+  font-size: 0.85em;
+}
+
+/* Scroll bar (subtle) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--c-text-subtle);
+}
+
+/* Focus */
+:focus-visible {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* Selection */
+::selection {
+  background: var(--c-accent);
+  color: var(--c-accent-fg);
+}

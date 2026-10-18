@@ -1,0 +1,6 @@
+{
+  "id": "word-tools",
+  "name": "Word tools",
+  "description": "Docs recipe: injects an MCP server into every new agent and logs how turns end.",
+  "requirements": { "paseo": ">=0.11.2" }
+}

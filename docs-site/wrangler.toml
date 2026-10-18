@@ -1,0 +1,6 @@
+# Cloudflare Pages configuration for the paseo-plugin-devkit docs site.
+# The project name is a placeholder until a Pages project exists; it decides the
+# *.pages.dev URL. Deploy with `npm run build && npx wrangler pages deploy`.
+name = "paseo-plugin-devkit"
+pages_build_output_dir = "./build"
+compatibility_date = "2026-10-18"

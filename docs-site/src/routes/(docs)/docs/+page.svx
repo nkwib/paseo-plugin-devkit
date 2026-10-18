@@ -1,0 +1,91 @@
+<script>
+  import Callout from '#lib/components/Callout.svelte';
+  import PageMeta from '#lib/components/PageMeta.svelte';
+  import { meta } from '#lib/generated/meta.js';
+</script>
+
+<PageMeta
+  title="Overview"
+  description="What paseo-plugin-devkit (ppd) gives a Paseo plugin author, what it needs, and where to start."
+/>
+
+# Overview
+
+<p class="lede">
+<code>ppd</code> is a CLI, a set of vitest helpers and a Claude Code skill for people who write
+<a href="https://github.com/getpaseo/paseo" target="_blank" rel="noopener">Paseo</a> plugins. It gives you a dev daemon
+you can break, checks your plugin against what the host really accepts, and drives the web UI and a phone, without
+ever touching the Paseo you use every day.
+</p>
+
+<Callout kind="info" title="Unofficial">
+
+A community project, not affiliated with or endorsed by the Paseo team. It relies on parts of Paseo that are not a
+public API and was verified on Paseo {meta.verifiedPaseo}. See [Compatibility](/docs/compatibility).
+
+</Callout>
+
+<h2 id="why">Why it exists</h2>
+
+It was built while shipping a real plugin (a PDF and Office viewer). Each of these cost days, and each is now a
+check, a guard or one command:
+
+- **Hand-built isolated daemons.** Testing a plugin means a temp home, a free port, plugins and the web UI on, relay
+  off. One wrong flag and you restart or reconfigure your real daemon on port 6767. `ppd daemon up` does it safely in
+  one line.
+- **Host-contract surprises found late.** An icon name the app's Lucide build lacks makes the button silently vanish.
+  `class` syntax in a dependency passes on web and crashes on phones (Hermes). A module the host does not provide
+  throws only at load. `ppd check` finds these before install.
+- **No agent to test against.** Hooks, timeline cards and injected MCP tools need agent turns. The fake agent runs
+  scripted turns with no credentials.
+- **Registry submission gotchas.** Issues filed with `gh issue create` miss the `submission` label and are ignored.
+  Git listings never get automatic update PRs. The validator fails on macOS temp paths. `ppd registry` handles all
+  three.
+- **Device testing friction.** `adb reverse`, which device, is the phone unlocked, and never pressing keys on someone
+  else's phone. `ppd android up` connects it and reports state, read-only.
+
+<h2 id="what-you-get">What you get</h2>
+
+| Piece | What it is |
+| --- | --- |
+| `ppd` CLI | `create`, `daemon`, `install`, `dev`, `paseo`, `web`, `android`, `doctor`, `check`, `registry`, `release`. See [Commands](/docs/commands). |
+| `paseo-plugin-devkit/vitest` | `describeHostContract(dir)`: one vitest test per host-contract check. |
+| `paseo-plugin-devkit/testing` | `runChecks`, `assertWithinRpcBudget` and the pieces behind `ppd check`. |
+| `paseo-plugin-devkit` | Daemon, install and fake agent helpers for tests: `runFakeAgentTurn`, `sendFakeAgentTurn`, `agentTimeline`, `pluginRows`. |
+| `paseo-plugin-devkit/web` | `PaseoWeb`, the Playwright page object behind `ppd web`. |
+| Claude Code skill | `skills/paseo-plugin-dev`: the isolated-daemon loop, the safety rules, the host-contract table and device testing, for an agent working on your plugin. |
+
+<h2 id="requirements">Requirements</h2>
+
+| For | You need |
+| --- | --- |
+| Everything | Node {meta.node}, macOS or Linux. |
+| `daemon`, `install`, `dev`, `web`, fake agent | The Paseo CLI. The desktop app ships it; `ppd` also finds it inside `/Applications/Paseo.app`. |
+| `check` with the real compiler | The Paseo desktop app, or a [getpaseo/paseo](https://github.com/getpaseo/paseo) checkout in `PASEO_SOURCE`. Without either, `check` runs a labeled approximation. |
+| `web` | Google Chrome, or a Playwright Chromium matching `playwright-core`. |
+| Hermes checks | `react-native` as a devDependency of the plugin (it ships `hermesc` and the Hermes VM), or `HERMESC` and `HERMES`. |
+| `android` | `adb` (Android platform-tools) and the Paseo app on the phone. |
+
+`ppd doctor` reports all of these in one go.
+
+<h2 id="install">Install</h2>
+
+In a plugin:
+
+```sh
+npm install -D paseo-plugin-devkit
+npx ppd doctor
+```
+
+Outside a project, name the package: the npm name `ppd` belongs to an unrelated package.
+
+```sh
+npx --package paseo-plugin-devkit ppd create ~/code/my-plugin
+```
+
+<h2 id="next">Next</h2>
+
+- [Getting started](/docs/getting-started): create a plugin, run it on a dev daemon, screenshot it.
+- [Host-contract checks](/docs/check): what `ppd check` verifies and how to read its output.
+- [Fake agent](/docs/fake-agent): scripted agent turns for hooks, timeline cards and MCP tools.
+- [Safety model](/docs/safety): why `ppd` cannot reach your real daemon.

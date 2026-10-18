@@ -1,0 +1,101 @@
+<script>
+  import Callout from '#lib/components/Callout.svelte';
+  import PageMeta from '#lib/components/PageMeta.svelte';
+  import Shot from '#lib/components/Shot.svelte';
+  import SourceFile from '#lib/components/SourceFile.svelte';
+</script>
+
+<PageMeta
+  title="Settings screen"
+  description="A Paseo plugin settings screen whose values the plugin server reads when an agent turn ends: defineSettings, registerSettings, useSettings and the settings UI components, verified on a dev daemon."
+/>
+
+# Settings screen
+
+<p class="lede">
+<code>turn-alerts</code> logs a line when an agent turn ends, for failed turns only or for every turn. The choice
+lives in a settings screen in the app, and the server reads it on every turn.
+</p>
+
+<h2 id="schema">One schema for both sides</h2>
+
+A settings document is defined once in `shared/` and stored per Paseo host. Defaults for every field make `{}` a
+complete document, so a fresh install reads as valid settings.
+
+<SourceFile path="docs-site/recipes/settings/shared/preferences.ts" />
+
+<h2 id="server">The server reads them</h2>
+
+`registerSettings` returns a handle: `read()` gives the current document, `subscribe` reports saves. The hook reads
+on every turn, so a change applies to the next turn without a reload.
+
+<SourceFile path="docs-site/recipes/settings/index.server.ts" />
+
+<h2 id="screen">The screen</h2>
+
+`useSettings` goes through `loading`, then `ready` or an error state with a reset action. A save sends the whole
+document with the revision it was read at, so a save from another client in between is rejected instead of
+silently overwritten. The settings components come from `@getpaseo/plugin/client/ui` and follow the app's theme.
+
+<SourceFile path="docs-site/recipes/settings/client/alerts-screen.tsx" />
+
+The client registers the screen and a Command Center item that opens it:
+
+<SourceFile path="docs-site/recipes/settings/index.client.tsx" />
+
+<h2 id="run">Run it</h2>
+
+```sh
+npx ppd install path/to/recipes/settings
+npx ppd web --viewport 390x844 --command "Turn alert settings" --shot out/settings.png
+```
+
+```text
+installing path/to/recipes/settings as turn-alerts into http://127.0.0.1:7800
+turn-alerts: running (installed)
+client: passes the app's registration rules
+...
+screenshot: ~/code/my-plugin/out/settings.png
+console errors: none
+plugin evaluation errors: none
+```
+
+<Shot
+  src="/shots/settings-screen-phone.png"
+  alt="The Turn alerts settings screen in the compact layout: a switch 'Log an alert when a turn ends', on, and a select 'Which turns' set to 'Failed or canceled'."
+  width={700}
+  height={526}
+  narrow
+  caption="The screen at 390x844, cropped."
+/>
+
+Click the switch by its label, and the server's subscription logs the saved document:
+
+```sh
+npx ppd web --command "Turn alert settings" --click "Log an alert when a turn ends"
+npx ppd paseo -- plugin logs turn-alerts
+```
+
+```text
+2026-10-18T08:20:31.677Z  stdout    alert settings saved: {"enabled":false,"turns":"failed"}
+```
+
+Switch it back on, run a failing fake agent turn (with `--fake-agent` on the daemon), and the hook logs the alert:
+
+```sh
+npx ppd web --command "Turn alert settings" --click "Log an alert when a turn ends"
+mkdir -p /tmp/ws
+npx ppd paseo -- run --provider fake-agent --cwd /tmp/ws '{"steps":[{"write":{"path":"b.txt","content":"b"}},{"fail":"boom"}]}'
+npx ppd paseo -- plugin logs turn-alerts
+```
+
+```text
+2026-10-18T08:25:00.582Z  stdout    alert: turn failed for agent a812c7be-1ab0-4dc2-80e5-15ec4125766a
+```
+
+<Callout kind="info" title="In ppd check">
+
+`ppd check` evaluates the server with a settings handle that reads as the schema defaults and never reports a save,
+so `read` and `subscribe` work during the check.
+
+</Callout>

@@ -1,0 +1,129 @@
+<script>
+  import Callout from '#lib/components/Callout.svelte';
+  import PageMeta from '#lib/components/PageMeta.svelte';
+</script>
+
+<PageMeta
+  title="Host-contract checks"
+  description="What ppd check verifies before you install a Paseo plugin: Paseo's own compiler and evaluator, the app's client registration rules, Lucide icon names, Hermes, bundle sizes and import boundaries."
+/>
+
+# Host-contract checks
+
+<p class="lede">
+Paseo's plugin host accepts less than its types suggest. An unknown icon name drops your whole client with one console
+warning; <code>class</code> syntax works on web and crashes on phones; a module the host does not provide throws only
+when the plugin loads. <code>ppd check</code> finds these before you install.
+</p>
+
+```sh
+npx ppd check            # the plugin in cwd
+npx ppd check path/to/plugin --json
+```
+
+It exits 1 on any `FAIL`; warnings and skips do not fail. All flags are on [Commands](/docs/commands#check).
+
+<h2 id="compiler">Where the compiler comes from</h2>
+
+`ppd check` compiles and evaluates with Paseo's own code when it can find it, in this order:
+
+1. `--paseo-source` or `PASEO_SOURCE`: a [getpaseo/paseo](https://github.com/getpaseo/paseo) checkout with
+   `npm ci` done, to test against unreleased Paseo.
+2. The installed Paseo app: `--paseo-app`, `PASEO_APP`, the app behind `paseo` on `PATH`,
+   `/Applications/Paseo.app`, `~/Applications/Paseo.app`. The compiler and evaluator are read from its `app.asar`,
+   the Lucide icon list from its web bundle (`app-dist`).
+3. Neither: an esbuild replica with Paseo 0.11's build options and rules vendored from Paseo. The output says
+   `APPROXIMATION` on the `paseo-compile` line and reports the replica's compile as `approx-compile`. `--approx`
+   forces this path, which is what CI without Paseo sees.
+
+<h2 id="checks">The checks</h2>
+
+| Check | What it verifies |
+| --- | --- |
+| `manifest` | `paseo-plugin.json` follows Paseo's manifest schema: the id format, a `requirements.paseo` semver range (without it Paseo refuses the plugin), `build` as argv arrays, a PNG icon that exists inside the package, media paths. Unknown keys are warnings. There must be a client or a server entry. |
+| `imports` | Node modules only on the server, React only on the client. Client code does not import `server/`, server code does not import `client/`, `shared/` imports neither, and plugin modules live in `client/`, `server/` or `shared/`. |
+| `dependencies` | Every package your code imports is declared, in `dependencies` when the manifest `build` omits dev dependencies, and a `build` step exists for Git installs. Host-provided packages belong in devDependencies. A runtime `@types/node` of 26 or newer is a warning (it breaks installs on Paseo 0.11.4). |
+| `paseo-compile` | Paseo's own `compilePlugin` accepts the plugin. Compile errors carry file:line:col. |
+| `client-requires` | The client bundle requires only modules the app provides: the SDK, `react`, `react-native`, `react/jsx-runtime`, `zod`, `@tanstack/react-query`. Gesture handler, reanimated, safe-area, SVG, Lucide and DOM packages are not available to plugins. |
+| `server-requires` | The server bundle requires only host modules and Node built-ins; any other bare require would resolve from Paseo's install, not your plugin. |
+| `server-eval` | Paseo's evaluator runs the server contribution in a child process with a 30 s timeout (Paseo's init timeout) and lists the RPCs it registered. The returned cleanup is called; handles it leaves open (servers, timers) are warnings. A `process.exit`, a hang or a missing cleanup function fails. |
+| `client-eval` | The client contribution runs in a child process against stub host modules and the app's registration rules: ids, contexts, titles, callbacks, components, duplicates, icons, the cleanup function, and methods the app's client context does not have. Any violation fails, because the app then drops the whole client. |
+| `hermes-class` | No `class` syntax in the client bundle: it crashes plugin loading on Hermes, the phone JavaScript engine. |
+| `hermes-parse` | `hermesc` compiles the client bundle. Skipped without `hermesc`. |
+| `hermes-vm` | The Hermes VM evaluates the bundle and runs the contribution. Skipped without the VM. |
+| `lucide-icons` | Every contribution icon exists in the app's Lucide set; unknown names in other client source are warnings (the icon renders nothing). |
+| `bundle-size` | Client and server sizes against budgets (2 MiB client, 32 MiB server, `--max-client-kb` and `--max-server-kb`). Over budget is a warning. |
+
+`react-native` as a devDependency ships both `hermesc` and the Hermes VM (`ppd create` adds it); `HERMESC` and
+`HERMES` point at other binaries.
+
+<h2 id="failing">A failing run</h2>
+
+The panel template with two typical mistakes: an icon name the app's Lucide build does not have (`HandWaving`) and a
+small `class` in the client.
+
+```text
+PASS  manifest         my-plugin, requires paseo >=0.11.4
+PASS  imports          client, server and shared boundaries hold
+PASS  dependencies     no runtime packages
+PASS  paseo-compile    compilePlugin of the Paseo 0.11.4 app (/Applications/Paseo.app) accepted the plugin
+PASS  client-requires  client requires only host modules (@getpaseo/plugin, @getpaseo/plugin/client, react, react-native, react/jsx-runtime, zod)
+PASS  server-requires  server requires only host modules and Node built-ins
+PASS  server-eval      Paseo's evaluator ran the contribution in 0 ms; RPCs: hello.greet
+FAIL  client-eval      the app would reject this plugin client and show none of its UI
+      Unknown Lucide icon: HandWaving
+      contributions: addWorkspacePanel, addCommandCenterItem
+FAIL  hermes-class     client bundle contains class syntax, which crashes plugin loading on Hermes (getpaseo/paseo#5783)
+      Transforming class syntax to the configured target environment is not supported yet (line 95): var Greeting = class {
+FAIL  hermes-parse     hermesc rejected the client bundle
+      $TMPDIR/ppd-hermes-0UWV2R/bundle.js:95:16: error: Invalid expression encountered
+      var Greeting = class {
+                     ^~~~~~~
+      Emitted 1 errors. exiting.
+FAIL  hermes-vm        Hermes VM failed at evaluate: SyntaxError: 95:16:Invalid expression encountered
+FAIL  lucide-icons     unknown Lucide names in contributions (Paseo throws at registration): HandWaving
+PASS  bundle-size      client 5 KiB (2 KiB gzip), budget 2.0 MiB; server 2 KiB (1 KiB gzip), eval 0 ms, budget 32.0 MiB
+
+8 passed, 0 warnings, 5 failed, 0 skipped
+```
+
+Paseo itself compiled this plugin without complaint, and on the web the panel would simply not be there. Installing
+it shows the same verdict from the other side:
+[`client-rejected`](/docs/troubleshooting#client-rejected).
+
+<h2 id="vitest">In your test suite</h2>
+
+```ts
+// test/host-contract.test.ts: one vitest test per check
+import { fileURLToPath } from "node:url";
+import { describeHostContract } from "paseo-plugin-devkit/vitest";
+
+describeHostContract(fileURLToPath(new URL("..", import.meta.url)));
+```
+
+Skipped checks show up as skipped tests. Warnings pass unless you pass `allowWarnings: false`; the other options are
+the same as `ppd check`'s (`paseoApp`, `paseoSource`, `maxClientBytes`, `maxServerBytes`).
+
+RPC handlers time out after 30 s in the host, and responses behind the relay share a 32 MiB frame. To keep a handler
+well inside both:
+
+```ts
+import { assertWithinRpcBudget } from "paseo-plugin-devkit/testing";
+
+await assertWithinRpcBudget(() => handlers.get("doc.render")!(worstCaseInput)); // < 15 s, < 8 MiB
+```
+
+<h2 id="ci">In CI</h2>
+
+Linux runners have no Paseo app, so `ppd check` runs the approximation there: imports, evaluation, Hermes and sizes
+still run, the compile is the esbuild replica, and icon names are checked against the plugin's own
+`lucide-react-native` if it has one. [`examples/ci.yml`](https://github.com/nkwib/paseo-plugin-devkit/blob/main/examples/ci.yml)
+adds a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and runs the real compiler with the latest SDK.
+
+<Callout kind="warn" title="Limits">
+
+Client evaluation and the Hermes run use stub host modules, not the real app: they catch load-time failures, not
+rendering bugs. Use [`ppd web`](/docs/getting-started#web) and a [phone](/docs/android) for those. Evaluation
+timeouts are fixed (30 s per bundle, 120 s for the real compile).
+
+</Callout>

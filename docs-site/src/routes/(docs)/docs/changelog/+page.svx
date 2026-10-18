@@ -1,0 +1,14 @@
+<script>
+  import PageMeta from '#lib/components/PageMeta.svelte';
+  import Changelog from '#lib/generated/changelog.svx';
+</script>
+
+<PageMeta title="Changelog" description="Release notes for paseo-plugin-devkit, from CHANGELOG.md in the repository." />
+
+# Changelog
+
+<p class="lede">
+From <a href="https://github.com/nkwib/paseo-plugin-devkit/blob/main/CHANGELOG.md">CHANGELOG.md</a>.
+</p>
+
+<Changelog />

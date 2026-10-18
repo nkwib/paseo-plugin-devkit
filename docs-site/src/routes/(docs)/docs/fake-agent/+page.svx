@@ -1,0 +1,210 @@
+<script>
+  import Callout from '#lib/components/Callout.svelte';
+  import PageMeta from '#lib/components/PageMeta.svelte';
+</script>
+
+<PageMeta
+  title="Fake agent"
+  description="A credential-free Paseo provider that runs scripted agent turns: say, think, write, edit, bash, mcp, sleep and fail steps, real timeline items, real file effects and real MCP calls."
+/>
+
+# Fake agent
+
+<p class="lede">
+Hooks, timeline cards and injected MCP tools need agent turns to test, and real providers need credentials, cost
+money and never do the same thing twice. The fake agent is a provider plugin that runs one scripted turn per prompt,
+with the timeline items real adapters produce.
+</p>
+
+```sh
+mkdir -p /tmp/ws
+npx ppd daemon up --fake-agent
+npx ppd paseo -- run --provider fake-agent --cwd /tmp/ws '{"steps":[{"write":{"path":"notes.md","content":"hi"}},{"say":"done"}]}'
+```
+
+`--fake-agent` installs the provider ([`assets/fake-agent`](https://github.com/nkwib/paseo-plugin-devkit/tree/main/assets/fake-agent))
+into the dev daemon, on start or into a daemon that is already running:
+
+```text
+fake agent provider "fake-agent" installed: paseo run --provider fake-agent '<script JSON>'
+```
+
+It appears in the app as the provider `fake-agent` with one model, "Scripted". It writes and edits files for real in
+the agent's cwd and calls tools on the MCP servers in the agent's session config, which is where plugins inject them
+in `before("agent.create")`. Paseo's own mock provider needs a development build and supports no MCP servers.
+
+<Callout kind="tip" title="Workspaces">
+
+`paseo run --cwd DIR` needs DIR to exist and creates a workspace for it, so leave `--workspace` off `daemon up` here.
+With two workspaces, `ppd web` needs `--workspace` to know which one to open; pass `--workspace <id>` to
+`paseo run` to reuse one.
+
+</Callout>
+
+<h2 id="scripts">What counts as a script</h2>
+
+For every prompt, in order:
+
+1. The whole prompt is JSON (it starts with a brace or a bracket): an object with a `steps` array, or a bare array of
+   steps. It must parse; an invalid script fails the turn with `fake-agent: invalid script: ...`.
+2. The prompt contains a fenced block whose language is `fake-agent`. Its body is the script, so the script can sit
+   inside a longer prompt.
+3. The agent's cwd has a `.fake-agent.json`: turn N runs its Nth script (see [several turns](#turns)).
+4. Otherwise the agent answers with one message: `fake-agent received: <prompt>`.
+
+<h2 id="steps">Steps</h2>
+
+Each step has exactly one key. Steps run in order.
+
+| Step | Effect | Timeline item |
+| --- | --- | --- |
+| `{"say": "text"}` | | `assistant_message` |
+| `{"think": "text"}` | | `reasoning` |
+| `{"write": {"path", "content"}}` | Writes the file (relative to the cwd), creating directories. | `tool_call` `Write`, `detail: {type: "write", filePath, content}` with an absolute `filePath` |
+| `{"edit": {"path", "old", "new"}}` | Replaces the first `old` with `new`. | `tool_call` `Edit`, `detail: {type: "edit", filePath, oldString, newString}`; `failed` when the file or the string is missing |
+| `{"bash": {"command", "output"?, "exitCode"?, "run"?}}` | Without `run`, records the command with the output and exit code you give. With `run: true`, runs it (see [shell steps](#bash)). | `tool_call` `Bash`, `detail: {type: "shell", command, cwd, output, exitCode}`; `failed` when the exit code is not 0 |
+| `{"mcp": {"server", "tool", "arguments"?}}` | Calls the tool on that MCP server (see [MCP steps](#mcp)). | `tool_call` `mcp__<server>__<tool>`, `detail: {type: "unknown", input, output}`; `failed` on errors |
+| `{"sleep": ms}` | Waits. An interrupt cancels the turn. | |
+| `{"fail": "message"}` | Ends the turn as failed. | `error` |
+
+`"stepDelayMs": N` next to `steps` pauses N ms before every step, which makes a turn slow enough to watch in the UI.
+
+<h2 id="example">A turn, end to end</h2>
+
+```sh
+npx ppd paseo -- run --provider fake-agent --cwd /tmp/ws '{"steps":[
+  {"think":"add a constant, then check it"},
+  {"write":{"path":"src/a.ts","content":"export const a = 1;\n"}},
+  {"edit":{"path":"src/a.ts","old":"1","new":"2"}},
+  {"bash":{"command":"cat src/a.ts","run":true}},
+  {"bash":{"command":"npm test","output":"1 failed","exitCode":1}},
+  {"say":"a is 2 now"}]}'
+npx ppd paseo -- logs <agent id>
+```
+
+```text
+[User] {"steps":[{"think":"add a constant, then check it"},{"write":...},...]}
+[Thought] add a constant, then check it
+[Write] /tmp/ws/src/a.ts
+[Edit] /tmp/ws/src/a.ts
+[Shell] cat src/a.ts
+[Shell] npm test
+a is 2 now
+```
+
+`src/a.ts` now holds `export const a = 2;`. The canonical timeline, as a plugin's `agent.turn_ended` hook sees it
+(read with `agentTimeline`, below):
+
+```json
+{"type":"reasoning","text":"add a constant, then check it"}
+{"type":"tool_call","callId":"t-1-1","name":"Write","detail":{"type":"write","filePath":"/tmp/ws/src/a.ts","content":"export const a = 1;\n"},"status":"completed","error":null}
+{"type":"tool_call","callId":"t-1-2","name":"Edit","detail":{"type":"edit","filePath":"/tmp/ws/src/a.ts","oldString":"1","newString":"2"},"status":"completed","error":null}
+{"type":"tool_call","callId":"t-1-3","name":"Bash","detail":{"type":"shell","command":"cat src/a.ts","cwd":"/tmp/ws","output":"export const a = 2;\n","exitCode":0},"status":"completed","error":null}
+{"type":"tool_call","callId":"t-1-4","name":"Bash","detail":{"type":"shell","command":"npm test","cwd":"/tmp/ws","output":"1 failed","exitCode":1},"status":"failed","error":"exit code 1"}
+{"type":"assistant_message","text":"a is 2 now","messageId":"a-1-5"}
+```
+
+A failed tool call does not fail the turn; this one ended `completed`.
+
+<h2 id="outcomes">How a turn ends</h2>
+
+A turn emits `user_message`, then its steps, then ends like a real provider's, so `agent.turn_started` and
+`agent.turn_ended` fire as usual:
+
+- `completed`: every step ran.
+- `failed`: a `fail` step, an invalid script, or a shell step the daemon refused. `paseo run` shows the agent as
+  `error`, and Paseo adds a system error to the timeline:
+
+  ```text
+  starting
+  [Error] tests failed
+  [System Error] tests failed
+  ```
+
+- `canceled`: the agent was interrupted, for example with `npx ppd paseo -- stop <agent id>`. A `sleep` ends at once, a running
+  command is killed (its tool call fails with `canceled`), an MCP call in flight finishes first, and the remaining
+  steps do not run. The agent goes back to `idle`.
+
+<h2 id="turns">Several turns</h2>
+
+A plain prompt in a cwd that has a `.fake-agent.json` runs the next scripted turn. The last one repeats:
+
+```json
+{
+  "turns": [
+    { "steps": [{ "write": { "path": "todo.md", "content": "- one\n" } }, { "say": "wrote todo.md" }] },
+    { "steps": [{ "edit": { "path": "todo.md", "old": "one", "new": "one, done" } }, { "say": "updated todo.md" }] }
+  ]
+}
+```
+
+After `paseo run` and two `paseo send`s:
+
+```text
+[User] start the todo list
+[Write] /tmp/turns/todo.md
+wrote todo.md
+[User] and again
+[Edit] /tmp/turns/todo.md
+updated todo.md
+[User] once more
+[Edit] /tmp/turns/todo.md
+updated todo.md
+```
+
+This is how you script a conversation from the app's composer, where typing JSON is awkward.
+
+<h2 id="bash">Shell steps</h2>
+
+With `run: true` the command runs with `/bin/sh -c` in the agent's cwd, with a 60 s timeout, and the tool call
+reports its real output and exit code. A non-zero exit fails the tool call, not the turn. As with real adapters, a
+file the command writes is not attributed to it (no `Write` item).
+
+<Callout kind="warn" title="Only in ppd's daemons">
+
+Real commands run only in a daemon `ppd daemon up` started: the provider checks that the daemon's home carries the
+`.ppd-home` marker. Installed into any other daemon, the step is refused without running, the tool call fails with
+exit code 126, and the turn fails:
+
+```text
+fake-agent refused to run this command: bash steps with run: true work only in a dev daemon started by `ppd daemon up`, and this daemon's home was not created by ppd
+```
+
+</Callout>
+
+<h2 id="mcp">MCP steps</h2>
+
+An `mcp` step sends `initialize`, `notifications/initialized` and `tools/call` to the named server from the session
+config, over HTTP (JSON or event-stream responses) or stdio, with a 10 s timeout per request. The tool's `result` is
+the tool call's `output`.
+
+- `"server": "*"` calls the tool on every configured server, one tool call each. With none configured it does
+  nothing.
+- An unknown server is a failed tool call, and the turn goes on:
+  `no MCP server "nope" in the session config (have: none)`.
+
+The [server hooks recipe](/docs/recipes/server-hooks) injects an MCP server with `before("agent.create")` and calls
+it from a fake turn.
+
+<h2 id="tests">From tests</h2>
+
+```ts
+import { agentTimeline, pluginRows, runFakeAgentTurn, sendFakeAgentTurn } from "paseo-plugin-devkit";
+
+const { agentId, status } = runFakeAgentTurn([{ write: { path: "a.ts", content: "x" } }, { say: "done" }], { cwd: workspace });
+sendFakeAgentTurn(agentId, [{ mcp: { server: "my-tools", tool: "show_to_human", arguments: { title: "hi" } } }]);
+const cards = pluginRows(agentTimeline(agentId), "turn-summary"); // plugin rows, which `paseo logs` omits
+```
+
+| Export | What it does |
+| --- | --- |
+| `runFakeAgentTurn(script, { cwd, name, timeoutMs })` | Creates a fake-agent agent and runs one turn to the end (`paseo run --json`). Returns `{ agentId, status }`. |
+| `sendFakeAgentTurn(agentId, script, { name, timeoutMs })` | Sends one more turn to an existing agent and waits for it (`paseo send`). |
+| `agentTimeline(agentId, { name })` | The canonical timeline, plugin rows included. |
+| `pluginRows(timeline, kind)` | The plugin rows of one kind, newest last. |
+| `fakeAgentPrompt(script)` | The prompt string for a script, to send from anywhere else. |
+
+`agentTimeline` reads the timeline with the Paseo client inside the installed desktop app (it is not on npm), so it
+needs the app or `PASEO_APP`. Plugin rows live in daemon memory, and hooks run asynchronously: poll briefly after a
+turn. [`test/create-e2e.test.ts`](https://github.com/nkwib/paseo-plugin-devkit/blob/main/test/create-e2e.test.ts)
+is a complete example.

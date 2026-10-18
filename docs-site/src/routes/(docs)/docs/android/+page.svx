@@ -1,0 +1,114 @@
+<script>
+  import Callout from '#lib/components/Callout.svelte';
+  import PageMeta from '#lib/components/PageMeta.svelte';
+</script>
+
+<PageMeta
+  title="Testing on a phone"
+  description="Connect an Android phone running the Paseo app to a ppd dev daemon over adb reverse, with read-only device checks that never send input."
+/>
+
+# Testing on a phone
+
+<p class="lede">
+Plugin clients also run in the Paseo phone app, under Hermes, with touch and a small screen. <code>ppd android</code>
+connects a phone to your dev daemon over <code>adb reverse</code> and tells you what state the phone is in. It
+never touches the phone beyond that.
+</p>
+
+<h2 id="before">Before the phone</h2>
+
+Two cheaper checks catch most phone problems:
+
+- `ppd check` compiles the client bundle with `hermesc` and runs it in the Hermes VM, so syntax Hermes rejects
+  fails before you reach a device. Both come from the plugin's `react-native` devDependency (the VM on macOS), or
+  set `HERMESC` and `HERMES`. See [Host-contract checks](/docs/check).
+- `ppd web --viewport 390x844` renders the app's compact layout in Chrome:
+
+```sh
+npx ppd web --viewport 390x844 --command "Open Hello panel" --shot out/hello-phone.png
+```
+
+<h2 id="setup">What you need</h2>
+
+| Need | Details |
+| --- | --- |
+| adb | Android platform-tools. ppd looks at `PPD_ADB`, `$ANDROID_HOME` or `$ANDROID_SDK_ROOT`, `~/Library/Android/sdk`, `~/Android/Sdk`, then `PATH`. |
+| A phone | With USB or wireless debugging authorized, and the Paseo app (`sh.paseo`) installed. |
+| A dev daemon | `ppd daemon up`, with your plugin installed (`ppd install` or `ppd dev`). |
+
+<h2 id="status">Check the phone</h2>
+
+```sh
+npx ppd android status
+```
+
+Output from a real phone (serial, model and foreground app changed):
+
+```text
+device: 3A091FDJH00ABC product:husky model:Pixel_8_Pro device:husky transport_id:2
+warning: foreground app is com.android.chrome: the user may be using the phone; do not inject input until Paseo is in front
+{
+  "awake": true,
+  "locked": false,
+  "paseoInstalled": true,
+  "foreground": "com.android.chrome"
+}
+no adb reverse rules
+```
+
+The state comes from `dumpsys` and `pm list packages`, read-only. Any warning (screen off, locked, Paseo missing,
+another app in front) makes `status` exit 1, which is the signal for an agent to stop and ask you.
+
+<h2 id="up">Connect it</h2>
+
+```sh
+npx ppd android up
+```
+
+```text
+device: 3A091FDJH00ABC product:husky model:Pixel_8_Pro device:husky transport_id:2
+warning: foreground app is com.android.chrome: the user may be using the phone; do not inject input until Paseo is in front
+adb reverse tcp:7800 -> dev daemon on 127.0.0.1:7800
+next:
+  1. ask the user to open Paseo on the phone and add the host localhost:7800
+  2. install or reload the plugin with ppd, then open its surface on the phone
+  3. screenshots: ~/Library/Android/sdk/platform-tools/adb -s 3A091FDJH00ABC exec-out screencap -p > shot.png
+  4. when done: ppd android down, then remove the host in the app
+rules: pin -s 3A091FDJH00ABC on every adb call, never send BACK or HOME, check the foreground app before any input
+```
+
+The phone now reaches the dev daemon as `localhost:7800`. Adding that host in the Paseo app is up to you: ppd does
+not tap anything. The `next` and `rules` lines are written for coding agents, which tend to act on what a command
+prints.
+
+<h2 id="down">Disconnect</h2>
+
+```sh
+npx ppd android down
+```
+
+```text
+device: 3A091FDJH00ABC product:husky model:Pixel_8_Pro device:husky transport_id:2
+removed adb reverse tcp:7800
+cleanup checklist:
+  - in the Paseo app, remove the host localhost:7800 (Settings > Hosts)
+  - leave the phone as you found it: no settings were changed by ppd
+```
+
+<h2 id="options">Options</h2>
+
+| Option | What it does |
+| --- | --- |
+| `--serial S` | Required when several devices are attached: ppd never picks one for you. An unauthorized device is reported as such. |
+| `--name N` | Reverse the port of the dev daemon `N` instead of `default`. |
+| `--port N` | Reverse a port that is not a dev daemon's. 6767 is refused with exit code 3: `refused: refusing port 6767: it belongs to your real Paseo daemon`. |
+
+<Callout kind="warn" title="Read-only by design">
+
+`ppd android` runs `adb devices`, `adb reverse` and read-only `dumpsys` and `pm` queries. It never sends key events
+or input, never presses BACK or HOME and never changes a setting, because the phone may be the one you are using.
+There is no iOS command yet; the [Claude Code skill](https://github.com/nkwib/paseo-plugin-devkit/tree/main/skills/paseo-plugin-dev)
+describes the manual simulator setup.
+
+</Callout>

@@ -64,6 +64,9 @@ jobs:
         run: |
           npm run gen:commands
           git diff --exit-code -- src/lib/commands.json
+      - name: Recipes pass ppd check
+        working-directory: docs-site
+        run: npm run check:recipes
       - working-directory: docs-site
         run: npm run build
 

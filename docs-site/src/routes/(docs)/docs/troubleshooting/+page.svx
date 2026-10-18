@@ -1,0 +1,176 @@
+<script>
+  import PageMeta from '#lib/components/PageMeta.svelte';
+</script>
+
+<PageMeta
+  title="Troubleshooting"
+  description="What ppd's messages mean and what to do: client-rejected installs, APPROXIMATION checks, Paseo layout mismatches, dev daemon, web UI and fake agent errors."
+/>
+
+# Troubleshooting
+
+<p class="lede">
+ppd's messages say what failed and what to do next. This page collects them by command, with the fix. A message
+that starts with <code>refused:</code> is a safety guard (exit code 3): see the <a href="/docs/safety">safety
+model</a>.
+</p>
+
+<h2 id="install">Install and dev loop</h2>
+
+<h3 id="client-rejected">client-rejected</h3>
+
+```text
+my-plugin: client-rejected (installed)
+client: the app would not evaluate this plugin's client, so none of its UI appears:
+  Unknown Lucide icon: HandWaving
+```
+
+The daemon installed the plugin and its server runs, but the app would refuse the client bundle, so no panel,
+screen or Command Center item shows up anywhere, and Paseo itself says nothing. `ppd install` and `ppd dev` exit 1.
+Each line under `client:` is a registration rule the app enforces, for example:
+
+- `Unknown Lucide icon: X`: the app's Lucide build has no icon named X.
+- `Command Center item X has no icon`, `Workspace panel X has invalid context`, `Screen X is not a component`.
+- `client.X is not part of the app's plugin client context (calling it throws)`.
+- `Plugin contribution must return a cleanup function`.
+
+Fix the line, save, and `ppd dev` re-checks on reload. `ppd check` reports the same rules as `client-eval`.
+
+<h3 id="logs">Where the logs are</h3>
+
+- Plugin output (`console.log` in server code, load and stop lines): `npx ppd paseo -- plugin logs <plugin id>`.
+  `ppd install` and `ppd dev` print the new lines after each install or reload.
+- The daemon's own output: `daemon.out` in the dev home that `ppd daemon status` prints.
+- The browser console: `ppd web` prints console errors after every run.
+
+<h2 id="check">ppd check</h2>
+
+<h3 id="approximation">APPROXIMATION</h3>
+
+```text
+SKIP  paseo-compile    APPROXIMATION: no Paseo app or PASEO_SOURCE found: install Paseo, or set PASEO_APP to Paseo.app or PASEO_SOURCE to a getpaseo/paseo checkout with node_modules. Compile, evaluation and icon checks below use an esbuild replica and rules vendored from Paseo, not the host itself
+```
+
+ppd found neither the Paseo desktop app nor a Paseo checkout, so it compiled with an esbuild replica of Paseo's
+build options. That is expected on Linux CI. On a Mac, install Paseo or point `PASEO_APP` (or `--paseo-app`) at it.
+`--approx` forces the replica on purpose. See [Host-contract checks](/docs/check).
+
+<h3 id="layout">could not load Paseo's plugin compiler</h3>
+
+```text
+FAIL  paseo-compile    could not load Paseo's plugin compiler from the Paseo 0.12.0 app: expected ... ppd was verified on Paseo 0.11.4 and found 0.12.0, so this release may lay things out differently. Use `ppd check --approx` ...
+```
+
+ppd reads the compiler, the evaluator and the Lucide list from inside the installed app, which is not a public API.
+A Paseo release that moves them breaks this, not your plugin. Use `ppd check --approx` or `PASEO_SOURCE`, and report
+it with the message. The same pattern covers the icon list (`lucide-icons` warns and falls back), `agentTimeline`
+and web UI labels. What ppd relies on is listed on [Compatibility](/docs/compatibility).
+
+<h3 id="hermes">Hermes checks skipped</h3>
+
+```text
+SKIP  hermes-parse     hermesc not found (install react-native as a devDependency, or set HERMESC)
+SKIP  hermes-vm        Hermes VM not found (react-native ships it for macOS; or set HERMES)
+```
+
+Add `react-native` as a devDependency (the templates do), or set `HERMESC` and `HERMES` to the binaries. Without
+them, only `hermes-class` (no `class` syntax) guards the phone.
+
+<h3 id="eval">The evaluation did not finish</h3>
+
+```text
+... did not finish within 30 s (an infinite loop or a blocking call at load or in contribute?)
+```
+
+Plugin code runs in a child process with a 30 s limit. A blocking loop at module load or in `contribute` ends
+here. `plugin code called process.exit(N)` means what it says: the host would
+lose the whole plugin process. A timer or server left running after the cleanup is a warning, not a failure.
+
+<h2 id="daemon">Dev daemon</h2>
+
+<h3 id="no-daemon">no running dev daemon</h3>
+
+```text
+no running dev daemon "default": run `ppd daemon up` first
+```
+
+`install`, `dev`, `paseo`, `web` and `android` need a daemon. With `--name N` on `daemon up`, pass the same
+`--name N` to the others. A record whose process is gone is cleaned up by the next `ppd daemon up`.
+
+<h3 id="ports">Ports</h3>
+
+```text
+port 7810 is already in use: pick another --port or omit it
+no free port in 7800-7899; pass --port
+dev daemon "default" is already running on port 7800: run `ppd daemon down` first, or pass --name for a second daemon
+```
+
+Without `--port`, ppd takes the first free port from 7800 to 7899. `ppd daemon status --all` lists ppd's dev
+daemons, and `ppd doctor` shows the running ones.
+
+<h3 id="paseo-not-found">Paseo CLI not found</h3>
+
+```text
+Paseo CLI not found: install Paseo, put `paseo` on PATH, or pass --paseo / PASEO_BIN
+```
+
+ppd looks at `--paseo` or `PASEO_BIN`, then `paseo` on `PATH`, `~/.local/bin/paseo` and
+`/Applications/Paseo.app/Contents/Resources/bin/paseo`. An explicit path that does not exist is an error, never a
+fallback to another Paseo.
+
+<h3 id="daemon-start">dev daemon exited early</h3>
+
+The message ends with the daemon's last output and how ppd started it:
+`paseo daemon run --home <home>` with `PASEO_HOME` and `PASEO_LISTEN` set and a `config.json` in the home. When
+the Paseo version differs from the verified one, the message says so: a new release may have changed the flags.
+
+<h2 id="web">ppd web</h2>
+
+<h3 id="no-web-ui">No web UI</h3>
+
+```text
+this dev daemon has no web UI: restart it with `ppd daemon up --web-dist <dir>`
+```
+
+The web UI comes from the desktop app (`Paseo.app/Contents/Resources/app-dist`) or `PASEO_WEB_UI_DIST_DIR`.
+`ppd daemon up` prints `(no web UI build found: pass --web-dist)` next to the URL when it found none.
+
+<h3 id="no-browser">No browser</h3>
+
+```text
+no browser for Playwright: install Google Chrome, run `npx playwright-core install chromium`, or set PPD_BROWSER
+```
+
+<h3 id="workspaces">No workspace opened</h3>
+
+```text
+2 workspaces on the dev daemon, none opened: pass --workspace <id, name or dir> (ids: wks_..., wks_...)
+no workspace on the dev daemon, showing the start page: `ppd daemon up --workspace <dir>` creates one
+```
+
+With one workspace, `ppd web` opens it. `paseo run --cwd DIR` creates a workspace per new directory, so fake agent
+runs in several directories leave several.
+
+<h3 id="web-labels">The web UI did not show ...</h3>
+
+```text
+the Paseo web UI did not show the workspace (a "Workspace actions" button) within 30 s. ppd finds it by the labels of the Paseo 0.11.4 web UI; a different version may have renamed it ...
+```
+
+`ppd web` finds the app shell, workspaces and the Command Center by their accessible names. On a Paseo other than
+0.11.4 a renamed label ends here; please report it. On 0.11.4, retry with `--headed` to watch what the page does.
+
+<h2 id="fake-agent">Fake agent</h2>
+
+```text
+fake-agent: invalid script: ...
+fake-agent refused to run this command: bash steps with run: true work only in a dev daemon started by `ppd daemon up`, and this daemon's home was not created by ppd
+```
+
+A prompt that starts with a brace or a bracket must be a valid script. Shell steps with `run: true` only run in
+ppd's own daemons. See [Fake agent](/docs/fake-agent).
+
+<h2 id="npx">npx ppd runs something else</h2>
+
+Outside a project that has `paseo-plugin-devkit` installed, `npx ppd` resolves to an unrelated npm package named
+`ppd`. Use `npx --package paseo-plugin-devkit ppd <command>`, or install the devkit as a devDependency first.

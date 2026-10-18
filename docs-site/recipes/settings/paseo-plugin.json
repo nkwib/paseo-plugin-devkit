@@ -1,0 +1,6 @@
+{
+  "id": "turn-alerts",
+  "name": "Turn alerts",
+  "description": "Docs recipe: a settings screen whose values the server reads when a turn ends.",
+  "requirements": { "paseo": ">=0.11.4" }
+}

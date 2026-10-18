@@ -1,0 +1,66 @@
+<script>
+  import Callout from '#lib/components/Callout.svelte';
+  import PageMeta from '#lib/components/PageMeta.svelte';
+</script>
+
+<PageMeta
+  title="Safety model"
+  description="How ppd keeps its dev daemons away from your real Paseo: port 6767 and ~/.paseo refused, marked temp homes, scrubbed environments, pinned CLI targets, pid checks and exit code 3."
+/>
+
+# Safety model
+
+<p class="lede">
+ppd runs next to your real Paseo, and often inside a coding agent that Paseo itself is running. One wrong port, home
+or environment variable would restart or rewrite the daemon you work in. These guards are code with tests, not
+advice.
+</p>
+
+<h2 id="guards">The guards</h2>
+
+| Guard | What it stops |
+| --- | --- |
+| Port 6767 is refused | `daemon up --port` and `android --port` refuse it, the automatic pick (7800 to 7899) skips it, and a daemon record pointing at it is not used. Ports below 1024 and anything that is not plain digits are refused too, so `06767` and `+6767` do not slip through. |
+| Homes live in temp directories | A dev home is a fresh `mkdtemp` directory named `ppd-<name>-` under `$TMPDIR`. After resolving symlinks it must sit strictly inside a temp root (`$TMPDIR`, `/tmp`, `/private/tmp`) and must not overlap `~/.paseo`, or `PASEO_HOME` when it points outside temp. |
+| Only marked homes are deleted | Every home ppd creates gets a `.ppd-home` marker. `daemon down`, and the cleanup of a daemon that died, remove a home only when it carries the marker and passes the home check again. |
+| Only its own processes are signalled | `daemon down` signals a pid only when that process's command line carries `--home <that dev home>`. Otherwise: `pid N is alive but is not this dev daemon; not signalling it`. |
+| A scrubbed environment | The daemon, every Paseo CLI call and the plugin code `ppd check` runs get an environment without inherited `PASEO_*` variables (`PASEO_HOME`, `PASEO_AGENT_ID`, `PASEO_CLI`, ...), so ppd run by an agent inside Paseo cannot reach the parent daemon. The daemon and the CLI calls then get `PASEO_HOME` set to the dev home. |
+| Pinned CLI target | Every Paseo CLI call ends with `--home <dev home>`. `ppd paseo -- ... --home X` or `--host X` is refused: `do not pass --home: ppd always targets its own dev daemon`. |
+| Loopback only | The daemon listens on `127.0.0.1`, with relay and MCP off. A daemon record whose URL is not `http://127.0.0.1:<checked port>` is refused. |
+| Real commands only in dev daemons | The fake agent runs `bash` steps with `run: true` only when the daemon's home has the `.ppd-home` marker. Installed into any other daemon, it refuses. See [Fake agent](/docs/fake-agent#bash). |
+| Phones are read-only | `ppd android` never sends input or key events and never changes settings, and never guesses between several devices. See [Testing on a phone](/docs/android). |
+| Public actions are opt-in | `ppd release` asks before it pushes and refuses without a terminal unless `--yes`. `ppd registry update` prints the push and PR commands unless `--yes`. `ppd registry submit` only prints the form URL. |
+
+The guards live in [`src/safety.ts`](https://github.com/nkwib/paseo-plugin-devkit/blob/main/src/safety.ts) and
+are pinned by `test/safety.test.ts` and `test/review-devkit-safety.test.ts`, which try bypasses such as symlinked
+temp paths, relative paths into `~/.paseo`, port spellings and forged daemon records.
+
+<h2 id="exit-3">Refusals exit with code 3</h2>
+
+A refusal prints `refused:` and exits 3, so scripts and agents can tell it from an ordinary failure (exit 1):
+
+```sh
+npx ppd android up --port 6767; echo "exit $?"
+```
+
+```text
+refused: refusing port 6767: it belongs to your real Paseo daemon
+exit 3
+```
+
+The CI smoke test asserts the same for `ppd daemon up --port 6767`.
+
+<h2 id="state">Where ppd keeps state</h2>
+
+Daemon records (name, pid, port, home, URL) are JSON files in `$XDG_STATE_HOME/paseo-plugin-devkit/daemons`, by
+default `~/.local/state/paseo-plugin-devkit/daemons`; set `PPD_STATE_DIR` to move them. Nothing is written under
+`~/.paseo`. The daemon's own files (`config.json`, `daemon.out` and `daemon.log`, agents, projects) stay in its temp
+home and go away with `ppd daemon down` (`--keep-home` keeps them for inspection).
+
+<Callout kind="warn" title="Isolated from your Paseo, not from your machine">
+
+A dev daemon is a real Paseo daemon running as your user. Plugin server code, and fake agent shell steps, can do
+anything you can do on this machine. The guards keep ppd from touching your real Paseo; they do not sandbox the
+plugin you are testing. Test plugins you trust, or run the whole thing in a VM or container.
+
+</Callout>

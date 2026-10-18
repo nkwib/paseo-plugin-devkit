@@ -1,0 +1,126 @@
+<script>
+  import Callout from '#lib/components/Callout.svelte';
+  import PageMeta from '#lib/components/PageMeta.svelte';
+  import Shot from '#lib/components/Shot.svelte';
+  import SourceFile from '#lib/components/SourceFile.svelte';
+</script>
+
+<PageMeta
+  title="Timeline renderer"
+  description="A Paseo plugin that summarizes every agent turn into a timeline card: an agent.turn_ended hook, timeline.append, a timeline renderer and a screen, tested with the fake agent."
+/>
+
+# Timeline renderer
+
+<p class="lede">
+When an agent turn ends, the server summarizes the files it wrote and the commands it ran, and appends a card to the
+agent's timeline. The client renders the card and a screen with every turn. This is the <code>agent-hook</code>
+template.
+</p>
+
+```sh
+npx --package paseo-plugin-devkit ppd create ~/code/turn-cards --template agent-hook
+cd ~/code/turn-cards && npm install
+npm run check && npm test
+```
+
+```text
+...
+PASS  client-eval      contributions: addTimelineRenderer, addScreen
+...
+13 passed, 0 warnings, 0 failed, 0 skipped
+
+ Test Files  2 passed (2)
+      Tests  15 passed (15)
+```
+
+<h2 id="data">The row</h2>
+
+A plugin timeline row has a `kind`, a `version` and `data`. The client validates `data` with the same schema before
+it renders, so the schema lives in `shared/`. The RPC lets the screen list every summary of an agent.
+
+<SourceFile path="templates/agent-hook/shared/turn-summary.ts" />
+
+<h2 id="server">The hook</h2>
+
+`agent.turn_ended` carries the whole conversation, so the summary starts after the last user message. Files come
+from the `detail.filePath` of write and edit tool calls; a file a shell command writes is not attributed by the host.
+
+<SourceFile path="templates/agent-hook/server/summarize.ts" />
+
+Turns without tool calls get no card. The row is appended with `paseo.agents.ref(id).timeline.append`, and kept in
+memory for the RPC:
+
+<SourceFile path="templates/agent-hook/index.server.ts" />
+
+<h2 id="client">The card and the screen</h2>
+
+Timeline renderers get no navigation props, so the card closes over the `client` from `contribute` to open the
+screen.
+
+<SourceFile path="templates/agent-hook/client/summary-card.tsx" />
+
+<SourceFile path="templates/agent-hook/index.client.tsx" />
+
+<h2 id="run">Run it with the fake agent</h2>
+
+```sh
+mkdir -p /tmp/turn-cards-ws
+npx ppd daemon up --fake-agent
+npx ppd install
+npx ppd paseo -- run --provider fake-agent --cwd /tmp/turn-cards-ws '{"steps":[{"write":{"path":"notes.md","content":"hi"}},{"say":"done"}]}'
+npx ppd paseo -- plugin logs turn-cards
+npx ppd web --shot out/card.png
+```
+
+The plugin log shows the hook ran:
+
+```text
+turn summary appended for 544f3a69-ae2b-465c-af06-6d3183b8fbf9: 1 file(s), 0 command(s)
+```
+
+<Shot
+  src="/shots/turn-summary-card.png"
+  alt="A fake agent turn in the Paseo web UI: the Write notes.md tool call, the reply 'done', and below it the plugin's Turn summary card with '1 file changed, 0 commands run', notes.md and an All turns button."
+  width={1400}
+  height={900}
+  caption="The card under the fake agent's turn, from ppd web. The model picker shows the fake agent's only model, Scripted."
+/>
+
+<h2 id="test">Test it</h2>
+
+`paseo logs` does not show plugin rows; `agentTimeline` reads the canonical timeline, plugin rows included. Hooks
+run asynchronously, so poll:
+
+```ts
+import { agentTimeline, pluginRows, runFakeAgentTurn, sendFakeAgentTurn } from "paseo-plugin-devkit";
+
+const turn = runFakeAgentTurn(
+  [
+    { write: { path: "notes.md", content: "first\n" } },
+    { bash: { command: "npm test", output: "ok", exitCode: 0 } },
+    { say: "Done." },
+  ],
+  { cwd: workspace },
+);
+// waitFor polls until the probe returns something other than null (see the test linked below).
+const [card] = await waitFor(() => {
+  const rows = pluginRows(agentTimeline(turn.agentId), "turn-summary");
+  return rows.length ? rows : null;
+});
+expect(card).toMatchObject({ data: { outcome: "completed", files: [join(workspace, "notes.md")], commands: ["npm test"] } });
+
+// A chat-only turn gets no card.
+sendFakeAgentTurn(turn.agentId, [{ say: "just chatting" }]);
+```
+
+The devkit's
+[`test/create-e2e.test.ts`](https://github.com/nkwib/paseo-plugin-devkit/blob/main/test/create-e2e.test.ts) runs
+this against a dev daemon it starts and stops itself, with `waitFor` and a failing turn.
+
+<Callout kind="tip" title="Real agents">
+
+The fake agent emits the canonical `write`, `edit` and `shell` items that Paseo maps real tools onto. Real adapters
+can differ in the details, so run a hook once with a real agent before you ship it.
+
+</Callout>

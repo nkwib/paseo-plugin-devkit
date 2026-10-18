@@ -1,0 +1,38 @@
+<script>
+  import PageMeta from '#lib/components/PageMeta.svelte';
+</script>
+
+<PageMeta
+  title="Recipes"
+  description="Complete Paseo plugins that pass ppd check: a timeline renderer fed by an agent hook, a settings screen read by the server, and server hooks that inject an MCP server."
+/>
+
+# Recipes
+
+<p class="lede">
+Each recipe is a whole plugin, verified on a dev daemon with the commands on its page. The code shown is the code
+that is checked: pages read it from the repository at build time.
+</p>
+
+| Recipe | What it shows | Uses |
+| --- | --- | --- |
+| [Timeline renderer](/docs/recipes/timeline-renderer) | A card under every agent turn that touched files, and a screen listing all turns. | `server.on("agent.turn_ended")`, `timeline.append`, `addTimelineRenderer`, `addScreen`, an RPC |
+| [Settings screen](/docs/recipes/settings) | A settings screen whose values the server reads when a turn ends. | `defineSettings`, `registerSettings`, `useSettings`, `addSettingsScreen`, `addCommandCenterItem` |
+| [Server hooks](/docs/recipes/server-hooks) | An MCP server injected into every new agent, and a log line for every finished turn. | `server.before("agent.create")`, `server.on("agent.turn_ended")` |
+
+The timeline renderer is the `agent-hook` template of `ppd create`, which the devkit's own tests create, check and
+run. The other two live in
+[`docs-site/recipes`](https://github.com/nkwib/paseo-plugin-devkit/tree/main/docs-site/recipes), and CI runs
+`ppd check` on them.
+
+<h2 id="try">Try one</h2>
+
+From any plugin repo with `paseo-plugin-devkit` installed and a dev daemon running:
+
+```sh
+npx ppd check path/to/recipes/settings
+npx ppd install path/to/recipes/settings
+```
+
+A recipe's devDependencies are there for types and tests only: Paseo provides `@getpaseo/plugin`, `react`,
+`react-native` and `zod` at runtime, so a recipe installs without `npm install`.

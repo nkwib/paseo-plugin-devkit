@@ -1,0 +1,158 @@
+/* Design tokens. Light is the default; dark comes from [data-theme="dark"] on <html>, set before paint
+   by the root layout, or from the OS setting when scripts are off. Both dark blocks share one palette. */
+/* Palette: teal accent on cool grey. */
+:root {
+  /* Type scale (modular, 1.2 ratio) */
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-md: 1.125rem;
+  --fs-lg: 1.35rem;
+  --fs-xl: 1.65rem;
+  --fs-2xl: 2.1rem;
+  --fs-3xl: 2.75rem;
+  --fs-4xl: 3.5rem;
+
+  /* Spacing */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  --sp-7: 3rem;
+  --sp-8: 4rem;
+  --sp-9: 6rem;
+
+  /* Radii */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --r-xl: 16px;
+
+  /* Layout */
+  --content-max: 48rem;
+  --wide-max: 76rem;
+  --sidebar-w: 15rem;
+  --header-h: 56px;
+
+  /* Fonts (self-hosted through @fontsource, imported in the root layout) */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    monospace;
+
+  --c-bg: #fafbfb;
+  --c-bg-alt: #f2f5f5;
+  --c-surface: #ffffff;
+  --c-surface-2: #f2f5f5;
+  --c-text: #14191c;
+  --c-text-muted: #4f5a60;
+  --c-text-subtle: #6d787e;
+  --c-border: #e1e7e8;
+  --c-border-strong: #cdd6d8;
+  --c-accent: #0f766e;
+  --c-accent-soft: #effcf9;
+  --c-accent-fg: #ffffff;
+  --c-good: #15803d;
+  --c-good-soft: #f0fdf4;
+  --c-warn: #b45309;
+  --c-warn-soft: #fffbeb;
+
+  --c-code-bg: #f2f5f5;
+  --c-code-text: #172024;
+  --c-code-comment: #6d787e;
+  --c-code-keyword: #0f766e;
+  --c-code-string: #a14d07;
+  --c-code-fn: #1d4ed8;
+  --c-code-num: #c2410c;
+  --c-code-punct: #4f5a60;
+  --c-code-prop: #6d28d9;
+  --c-code-tag: #0f766e;
+  --c-code-deleted: #b91c1c;
+  --c-code-inserted: #15803d;
+
+  --sh-sm: 0 1px 2px rgba(20, 25, 28, 0.04);
+  --sh-md: 0 4px 12px rgba(20, 25, 28, 0.06), 0 1px 2px rgba(20, 25, 28, 0.04);
+  --sh-lg: 0 12px 32px rgba(20, 25, 28, 0.08), 0 2px 6px rgba(20, 25, 28, 0.05);
+
+  color-scheme: light;
+}
+
+[data-theme='dark'] {
+  --c-bg: #0b0c0d;
+  --c-bg-alt: #111315;
+  --c-surface: #14171a;
+  --c-surface-2: #1a1e22;
+  --c-text: #f2f4f5;
+  --c-text-muted: #a3abb2;
+  --c-text-subtle: #737b83;
+  --c-border: #23282d;
+  --c-border-strong: #2f363c;
+  --c-accent: #2dd4bf;
+  --c-accent-soft: #0e2421;
+  --c-accent-fg: #0b0c0d;
+  --c-good: #4ade80;
+  --c-good-soft: #0e1f17;
+  --c-warn: #fbbf24;
+  --c-warn-soft: #2a2113;
+
+  --c-code-bg: #111315;
+  --c-code-text: #e4e7ea;
+  --c-code-comment: #737b83;
+  --c-code-keyword: #5eead4;
+  --c-code-string: #fcd34d;
+  --c-code-fn: #93c5fd;
+  --c-code-num: #fdba74;
+  --c-code-punct: #a3abb2;
+  --c-code-prop: #c4b5fd;
+  --c-code-tag: #5eead4;
+  --c-code-deleted: #fca5a5;
+  --c-code-inserted: #86efac;
+
+  --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sh-lg: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --c-bg: #0b0c0d;
+    --c-bg-alt: #111315;
+    --c-surface: #14171a;
+    --c-surface-2: #1a1e22;
+    --c-text: #f2f4f5;
+    --c-text-muted: #a3abb2;
+    --c-text-subtle: #737b83;
+    --c-border: #23282d;
+    --c-border-strong: #2f363c;
+    --c-accent: #2dd4bf;
+    --c-accent-soft: #0e2421;
+    --c-accent-fg: #0b0c0d;
+    --c-good: #4ade80;
+    --c-good-soft: #0e1f17;
+    --c-warn: #fbbf24;
+    --c-warn-soft: #2a2113;
+  
+    --c-code-bg: #111315;
+    --c-code-text: #e4e7ea;
+    --c-code-comment: #737b83;
+    --c-code-keyword: #5eead4;
+    --c-code-string: #fcd34d;
+    --c-code-fn: #93c5fd;
+    --c-code-num: #fdba74;
+    --c-code-punct: #a3abb2;
+    --c-code-prop: #c4b5fd;
+    --c-code-tag: #5eead4;
+    --c-code-deleted: #fca5a5;
+    --c-code-inserted: #86efac;
+  
+    --sh-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --sh-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --sh-lg: 0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
+  
+    color-scheme: dark;
+  }
+}

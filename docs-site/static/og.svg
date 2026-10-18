@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <rect width="1200" height="630" fill="#0b0c0d" />
+  <rect x="40" y="40" width="1120" height="550" rx="20" fill="#14171a" stroke="#23282d" stroke-width="2" />
+
+  <g transform="translate(100, 112) scale(2)" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12.5 3.5v5M19.5 3.5v5" stroke="#2dd4bf" stroke-width="2" />
+    <rect x="8" y="8.5" width="16" height="11" rx="3.2" stroke="#f2f4f5" stroke-width="1.8" />
+    <path d="M12.5 14l2.4 2.4 4.6-4.8" stroke="#2dd4bf" stroke-width="1.8" />
+    <path d="M16 19.5v2.5a5 5 0 0 0 5 5h6" stroke="#f2f4f5" stroke-width="1.8" />
+  </g>
+  <text x="178" y="158" font-family="JetBrains Mono, Menlo, monospace" font-size="28" fill="#9aa4ab">paseo-plugin-<tspan fill="#f2f4f5">devkit</tspan></text>
+
+  <text x="100" y="262" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="72" font-weight="700" fill="#f2f4f5" letter-spacing="-0.025em">Test Paseo plugins.</text>
+  <text x="100" y="342" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="72" font-weight="700" fill="#2dd4bf" letter-spacing="-0.025em">Never touch your real Paseo.</text>
+  <text x="100" y="402" font-family="Inter, Helvetica Neue, Arial, sans-serif" font-size="27" fill="#9aa4ab">Isolated dev daemon · host-contract checks · scripted fake agent · web and phone</text>
+
+  <g transform="translate(100, 448)">
+    <rect width="560" height="92" rx="12" fill="#0b0c0d" stroke="#23282d" stroke-width="2" />
+    <text x="24" y="38" font-family="JetBrains Mono, Menlo, monospace" font-size="20" fill="#9aa4ab">$ <tspan fill="#f2f4f5">npx ppd check</tspan></text>
+    <text x="24" y="70" font-family="JetBrains Mono, Menlo, monospace" font-size="20" fill="#4ade80">13 passed, 0 warnings, 0 failed</text>
+  </g>
+
+  <text x="1100" y="570" text-anchor="end" font-family="JetBrains Mono, Menlo, monospace" font-size="20" fill="#6b757c">npm i -D paseo-plugin-devkit</text>
+</svg>
