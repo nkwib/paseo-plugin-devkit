@@ -1,3 +1,11 @@
+// Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
+//   packages/server/src/server/plugins/plugin-sdk-specifiers.ts
+//   packages/server/src/server/plugins/compiler.ts
+//   packages/server/src/server/plugins/runtime.ts
+// Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
+// Modified: the specifier lists and limits are collected into one module, with notes on what each host module
+// provides.
+//
 // The Paseo plugin host contract as code. Sources: public-docs/plugins/reference.md (client runtime),
 // packages/server/src/server/plugins (compiler.ts, plugin-sdk-specifiers.ts, runtime.ts), Paseo 0.11.
 import { builtinModules } from "node:module";

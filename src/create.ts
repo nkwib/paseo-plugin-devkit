@@ -1,3 +1,9 @@
+// Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
+//   packages/cli/src/commands/plugin/scaffold.ts (the layout writeBuiltinBase reproduces)
+// Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
+// Modified: only the manifest, OVERVIEW.md stub, package.json and tsconfig are reproduced, the OVERVIEW.md guidance
+// is shortened, and the SDK version comes from the local Paseo CLI.
+//
 // `ppd create`: a new plugin that passes `ppd check` and installs as is. The base comes from `paseo plugin init`
 // when the Paseo CLI has it (manifest, OVERVIEW.md guidance, SDK versions matching the host), else from a built-in
 // copy of the same layout. A template then replaces init's sample code, and the files init leaves out are added:

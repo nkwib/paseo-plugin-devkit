@@ -1,6 +1,12 @@
-// The app's client registration rules, vendored from packages/app/src/plugins/evaluate.ts (getpaseo/paseo
-// 9bd58f66b). The app throws on the first violation and the whole plugin client fails to evaluate; the only
-// trace is a console.warn("[Plugins] Failed to evaluate ..."). Here every violation is collected instead.
+// Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
+//   packages/app/src/plugins/evaluate.ts
+// Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
+// Modified: the registration checks are rewritten as a standalone class with no app or React dependencies, take the
+// icon set as a parameter, and collect every violation instead of throwing on the first.
+//
+// The app's client registration rules. The app throws on the first violation and the whole plugin client fails
+// to evaluate; the only trace is a console.warn("[Plugins] Failed to evaluate ..."). Here every violation is
+// collected instead.
 
 const CONTRIBUTION_ID = /^[a-z][a-z0-9-]*$/;
 const PANEL_LOCATIONS = ["workspace", "explorer"];

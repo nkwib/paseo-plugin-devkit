@@ -1,3 +1,9 @@
+// Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
+//   packages/server/src/server/plugins/compiler.ts (wrapCommonJsBundle, makeHermesInteropEager, compileTarget build options)
+// Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
+// Modified: the build runs on the devkit's own esbuild without Paseo's import-boundary plugin, metafile dependency
+// check or type walk, and esbuild errors are reported with file:line:column.
+//
 // Compiling a plugin the way Paseo does. The host is, in order: a Paseo source checkout (PASEO_SOURCE), the
 // installed Paseo app (its app.asar ships the server's manifest reader, compilePlugin and bundle evaluator), or,
 // as a last resort, an esbuild approximation of the same build options that misses Paseo's import-boundary and

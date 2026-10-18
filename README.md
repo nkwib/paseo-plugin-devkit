@@ -274,4 +274,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: `npm ci && npm run typech
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Some files adapt code from [Paseo](https://github.com/getpaseo/paseo) (Apache-2.0, Copyright (c) 2025-present Mohamed Boudra); those portions stay under Apache-2.0. Each such file starts with a notice, and [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES) lists them with the full license text.

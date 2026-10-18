@@ -1,3 +1,10 @@
+// Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
+//   packages/server/src/server/plugins/bundle-evaluator.ts (evaluateBundle, runtimeRequire)
+//   packages/app/src/plugins/evaluate.ts (client require errors)
+// Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
+// Modified: host modules resolve from the plugin's own node_modules or a recording stub, and the contribution runs
+// against a recording context instead of the real host.
+//
 // Evaluating compiled plugin bundles outside Paseo: what they require, what they register, and how big they are.
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";

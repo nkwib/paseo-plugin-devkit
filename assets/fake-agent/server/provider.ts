@@ -1,3 +1,10 @@
+// Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
+//   plugin-examples/provider-direct/server/provider.ts (provider registration and connection skeleton)
+// Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see
+// THIRD_PARTY_NOTICES in the paseo-plugin-devkit package.
+// Modified: the example's capabilities and turns are replaced with scripted turns that perform real file effects in
+// the agent cwd and call tools on the session's MCP servers.
+//
 // A credential-free agent provider that runs a scripted turn per prompt (see ./script.ts and the devkit README,
 // "Fake agent"). It emits the same timeline items real adapters map their tools onto (write and edit with
 // `detail.filePath`, shell), performs the file effects for real in the agent's cwd, and calls tools on the MCP

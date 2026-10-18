@@ -1,7 +1,14 @@
-// paseo-plugin.json rules, vendored from packages/server/src/server/plugins/manifest.ts and
-// packages/protocol/src/plugin-config.ts + plugin-requirements.ts (getpaseo/paseo 9bd58f66b). The schema is a
-// non-strict z.object, so unknown keys such as `$comment` (written by `paseo plugin init`) are ignored, while
-// `requirements` is strict so a misspelled requirement cannot silently disable the compatibility check.
+// Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
+//   packages/server/src/server/plugins/manifest.ts
+//   packages/protocol/src/plugin-config.ts
+//   packages/protocol/src/plugin-requirements.ts
+// Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
+// Modified: the zod schemas are rewritten as plain checks that return errors and warnings instead of throwing, and
+// unknown top-level keys produce a warning.
+//
+// paseo-plugin.json rules. Paseo's schema is a non-strict z.object, so unknown keys such as `$comment` (written
+// by `paseo plugin init`) are ignored, while `requirements` is strict so a misspelled requirement cannot
+// silently disable the compatibility check.
 import validRange from "semver/ranges/valid.js";
 
 const PLUGIN_ID = /^[a-z][a-z0-9-]*$/;

@@ -1,3 +1,8 @@
+// Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
+//   packages/server/src/server/plugins/compiler.ts (directoryTarget)
+// Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
+// Modified: moduleLocation takes a path relative to the plugin and accepts both path separators.
+//
 // Source-level import scan: directory boundaries, forbidden client packages and runtime dependency placement.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";

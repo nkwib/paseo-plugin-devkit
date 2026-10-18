@@ -1,7 +1,7 @@
 {
   "name": "paseo-plugin-devkit",
   "version": "0.1.0",
-  "description": "Dev kit for Paseo plugin authors: isolated dev daemon, host-contract checks, web UI screenshots, registry and release helpers, plus a Claude Code skill.",
+  "description": "Unofficial dev kit for Paseo plugin authors: isolated dev daemon, host-contract checks, a scripted fake agent, web UI screenshots, registry and release helpers, plus a Claude Code skill.",
   "keywords": [
     "paseo",
     "paseo-plugin",
@@ -20,7 +20,7 @@
     "type": "git",
     "url": "git+https://github.com/nkwib/paseo-plugin-devkit.git"
   },
-  "license": "MIT",
+  "license": "MIT AND Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=22.18"
@@ -53,8 +53,12 @@
     "examples",
     "templates",
     "assets",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
