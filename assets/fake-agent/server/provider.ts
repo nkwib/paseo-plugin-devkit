@@ -174,6 +174,7 @@ async function prompt(input: Extract<ProviderInput, { type: "session.prompt" }>,
     for (const [index, step] of script.steps.entries()) {
       if (script.stepDelayMs) await sleep(script.stepDelayMs, abort.signal);
       const failed = await runStep(step, `${n}-${index}`, session, item, abort.signal);
+      if (abort.signal.aborted) return finish("canceled");
       if (failed !== null) return finish("failed", failed);
     }
   } catch (error) {
@@ -229,7 +230,8 @@ export async function runStep(step: FakeStep, id: string, session: Session, item
           done({ output: `${stdout}${stderr}`, exitCode: code });
         });
       });
-      tool("Bash", { type: "shell", command, cwd, output: result.output, exitCode: result.exitCode }, result.exitCode === 0 ? null : `exit code ${result.exitCode}`);
+      const error = signal.aborted ? "canceled" : result.exitCode === 0 ? null : `exit code ${result.exitCode}`;
+      tool("Bash", { type: "shell", command, cwd, output: result.output, exitCode: result.exitCode }, error);
     }
   } else if ("mcp" in step) {
     const { tool: toolName, arguments: args = {} } = step.mcp;

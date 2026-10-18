@@ -133,6 +133,44 @@ describe("review-devkit-safety: gaps", () => {
       expect((await runAll([proofStep], cwd)).failed).toBeNull();
       expect(readFileSync(join(cwd, "proof.txt"), "utf8")).toBe("ran\n");
     });
+
+    it("cancels the turn when interrupted during a running command and skips the remaining steps", async () => {
+      type Event = { type: string; state?: string; item?: Item & { text?: string } };
+      type Connection = { send(input: unknown): Promise<void>; onEvent(listener: (event: Event) => void): () => void; close(): Promise<void> };
+      const home = scratchDir("ppd-review-dev-home-");
+      writeFileSync(join(home, HOME_MARKER), "created by the test\n");
+      process.env.PASEO_HOME = home;
+      const cwd = scratchDir("ppd-review-cwd-");
+      const asset = new URL("../assets/fake-agent/server/provider.ts", import.meta.url).href;
+      const { createFakeAgent } = (await import(asset)) as { createFakeAgent(): { connect(request: unknown): Promise<Connection> } };
+      const connection = await createFakeAgent().connect({ capabilities: [] });
+      const events: Event[] = [];
+      connection.onEvent((event) => events.push(event));
+      const turnStates = () => events.filter((event) => event.type === "session.turn").map((event) => event.state);
+      const until = async (done: () => boolean) => {
+        for (let i = 0; i < 400 && !done(); i++) await new Promise((wake) => setTimeout(wake, 25));
+      };
+      const steps = [{ bash: { command: "sleep 20", run: true } }, { write: { path: "after.txt", content: "x" } }, { say: "after the command" }];
+      await connection.send({ type: "session.open", requestId: "open", sessionId: "s1", config: { cwd, mcpServers: {}, env: {} } });
+      await connection.send({
+        type: "session.prompt",
+        requestId: "prompt",
+        sessionId: "s1",
+        prompt: { clientMessageId: "m1", input: { type: "message", content: [{ type: "text", text: JSON.stringify({ steps }) }] } },
+      });
+      await until(() => turnStates().includes("started"));
+      await new Promise((wake) => setTimeout(wake, 300));
+      const interrupted = Date.now();
+      await connection.send({ type: "session.interrupt", requestId: "stop", sessionId: "s1" });
+      await until(() => turnStates().length > 1);
+      await connection.close();
+      expect(turnStates()).toEqual(["started", "canceled"]);
+      expect(Date.now() - interrupted).toBeLessThan(5_000);
+      const items = events.flatMap((event) => (event.type === "timeline.item" && event.item ? [event.item] : []));
+      expect(items.find((item) => item.type === "tool_call")).toMatchObject({ status: "failed", error: "canceled" });
+      expect(items.some((item) => item.text === "after the command")).toBe(false);
+      expect(existsSync(join(cwd, "after.txt"))).toBe(false);
+    }, 20_000);
   });
 
   it("requireDaemon rejects a record whose url does not match its checked port", async () => {
