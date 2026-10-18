@@ -13,6 +13,9 @@ const HELP = `ppd: dev kit for Paseo plugin authors
 Usage: ppd <command> [options]
        ppd <command> --help      options for one command
 
+Start
+  create <dir>            new plugin from a template (panel, agent-hook) that passes check
+
 Dev daemon (isolated: temp home, never port 6767, never ~/.paseo)
   daemon up|down|status   start, stop or inspect an isolated dev daemon
   install [dir]           install or reload a plugin in the dev daemon
@@ -32,6 +35,21 @@ Release and registry (user-run)
 Docs: https://github.com/nkwib/paseo-plugin-devkit`;
 
 const COMMAND_HELP: Record<string, string> = {
+  create: `ppd create <dir> [--template panel|agent-hook] [--id ID] [--name NAME] [--devkit SPEC] [--paseo BIN] [--no-init]
+
+Creates a plugin in dir (missing or empty) that passes \`ppd check\` and installs as is. The base comes from
+\`paseo plugin init\` (SDK versions matching your Paseo), else a built-in copy of the same layout. Added on top:
+tsconfig node types, an @types/node ~22 pin, .gitignore, vitest with a host-contract suite, npm scripts
+(check, test, dev, typecheck) and a README.
+
+  --template T  panel (default): workspace panel + Command Center item + one RPC (the devkit's hello-plugin)
+                agent-hook: server.on("agent.turn_ended") appends a timeline card; client renderer + screen
+  --id ID       manifest id (default: the directory name)
+  --name NAME   display name (default: from the id)
+  --devkit SPEC package.json spec for paseo-plugin-devkit (default: github:nkwib/paseo-plugin-devkit;
+                use file:/path/to/clone for a local checkout)
+  --paseo BIN   Paseo CLI for \`plugin init\` (default: PASEO_BIN, PATH, the desktop app)
+  --no-init     skip \`paseo plugin init\` and use the built-in base`,
   daemon: `ppd daemon up [--port N] [--name N] [--workspace DIR] [--web-dist DIR] [--caffeinate] [--paseo BIN]
 ppd daemon down [--name N] [--keep-home]
 ppd daemon status [--name N] [--json] [--all]
@@ -165,6 +183,29 @@ async function main(argv: string[]): Promise<number> {
     }
     case "daemon":
       return daemon(rest);
+    case "create": {
+      const { values, positionals } = parse(rest, {
+        template: { type: "string" },
+        id: { type: "string" },
+        name: { type: "string" },
+        devkit: { type: "string" },
+        paseo: { type: "string" },
+        "no-init": { type: "boolean" },
+      });
+      const { createPlugin, formatCreate, isTemplate, TEMPLATES } = await import("./create.ts");
+      if (!positionals[0]) throw new UsageError("ppd create <dir> [--template panel|agent-hook]");
+      const template = values.template ?? "panel";
+      if (!isTemplate(template)) throw new UsageError(`unknown template "${template}": ${TEMPLATES.join(", ")}`);
+      const result = await createPlugin(positionals[0], {
+        template,
+        id: values.id,
+        name: values.name,
+        devkit: values.devkit,
+        paseo: values["no-init"] ? null : values.paseo,
+      });
+      console.log(formatCreate(result));
+      return 0;
+    }
     case "install": {
       const { values, positionals } = parse(rest, { ...name, git: { type: "boolean" }, id: { type: "string" } });
       const result = await installPlugin(resolve(positionals[0] ?? "."), { name: values.name, id: values.id, git: values.git });
