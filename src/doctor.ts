@@ -7,6 +7,7 @@ import { findAdb } from "./android.ts";
 import { findPaseoApp, findPaseoSource } from "./check/compile.ts";
 import { findHermes } from "./check/hermes.ts";
 import { isDaemonLive, listDaemons } from "./daemon.ts";
+import { versionNote } from "./compat.ts";
 import { findPaseoBin, findWebDist, paseoVersion } from "./paseo.ts";
 import { run, which } from "./proc.ts";
 
@@ -54,7 +55,12 @@ export function collectDoctor(): DoctorItem[] {
   add("node", nodeVersionOk(process.version) ? "ok" : "warn", `${process.version} (need >= ${MIN_NODE.join(".")})`);
   const paseo = findPaseoBin();
   const version = paseo ? paseoVersion(paseo) : null;
-  add("paseo CLI", paseo ? "ok" : "missing", paseo ? `${version ?? "unknown version"} at ${paseo.replace(homedir(), "~")}` : "install Paseo or set PASEO_BIN");
+  const untested = versionNote(version);
+  add(
+    "paseo CLI",
+    paseo ? (untested ? "warn" : "ok") : "missing",
+    paseo ? `${version ?? "unknown version"} at ${paseo.replace(homedir(), "~")}${untested ? ` (${untested})` : ""}` : "install Paseo or set PASEO_BIN",
+  );
   const webDist = findWebDist();
   add("web UI build", webDist ? "ok" : "warn", webDist ?? "no app-dist found; pass --web-dist to `ppd daemon up`");
   const source = process.env.PASEO_SOURCE;

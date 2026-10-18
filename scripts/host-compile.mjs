@@ -29,6 +29,9 @@ try {
 } catch (error) {
   fail("load", error);
 }
+// A release that renames these must fail here, as a host problem, not later as if the plugin were at fault.
+const missing = ["readPluginManifest", "compilePlugin", "evaluateBundle"].filter((name) => typeof host[name] !== "function");
+if (missing.length) fail("load", new Error(`Paseo's plugin modules in ${plugins} do not export ${missing.join(", ")}`));
 
 try {
   result.manifest = await host.readPluginManifest(pluginDir);

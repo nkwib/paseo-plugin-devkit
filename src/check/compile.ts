@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { CLIENT_HOST_MODULES, SDK_SPECIFIERS, SERVER_HOST_MODULES } from "./host.ts";
 import { describeNoResult, runChild } from "./isolate.ts";
+import { layoutMismatch } from "../compat.ts";
 import { which } from "../proc.ts";
 
 export type Target = "client" | "server";
@@ -56,7 +57,10 @@ export interface PaseoApp {
   version: string | null;
 }
 
-const APP_PLUGINS = "app.asar/node_modules/@getpaseo/server/dist/server/server/plugins";
+/** Where the app bundle keeps the server's plugin modules (Paseo 0.11.4). */
+export const APP_PLUGINS = "app.asar/node_modules/@getpaseo/server/dist/server/server/plugins";
+/** The functions scripts/host-compile.mjs needs from those modules. */
+export const HOST_COMPILE_EXPORTS = ["readPluginManifest", "compilePlugin", "evaluateBundle"] as const;
 
 export function paseoAppAt(app: string): PaseoApp | null {
   const resources = join(app, "Contents/Resources");
@@ -202,12 +206,29 @@ export async function compileWithPaseo(pluginDir: string, paseoSource: string, t
 
 /** The host's own compile and server evaluation, in a child process (tsx for a checkout, the app's Electron Node for the app). */
 export async function compileWithHost(pluginDir: string, host: PaseoHost, timeoutMs = DEFAULT_COMPILE_TIMEOUT_MS): Promise<PaseoCompileResult> {
+  let result: PaseoCompileResult;
   if (host.kind === "source") {
     const plugins = join(host.root, "packages/server/src/server/plugins");
-    return runHostCompile(join(host.root, "node_modules/.bin/tsx"), [SCRIPT, plugins, ".ts", resolve(pluginDir)], { cwd: host.root, timeoutMs });
+    result = await runHostCompile(join(host.root, "node_modules/.bin/tsx"), [SCRIPT, plugins, ".ts", resolve(pluginDir)], { cwd: host.root, timeoutMs });
+  } else {
+    const env: NodeJS.ProcessEnv = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
+    result = await runHostCompile(host.helper, [SCRIPT, join(host.resources, APP_PLUGINS), ".js", resolve(pluginDir)], { env, timeoutMs });
   }
-  const env: NodeJS.ProcessEnv = { ...process.env, ELECTRON_RUN_AS_NODE: "1" };
-  return runHostCompile(host.helper, [SCRIPT, join(host.resources, APP_PLUGINS), ".js", resolve(pluginDir)], { env, timeoutMs });
+  return result.stage === "load" && result.error ? { ...result, error: `${hostLoadFailure(host)}\n${result.error}` } : result;
+}
+
+/** The first line of a load-stage failure: Paseo's modules are not where ppd looks, so this is not the plugin's fault. */
+export function hostLoadFailure(host: PaseoHost): string {
+  const modules = `compiler, bundle-evaluator and manifest modules exporting ${HOST_COMPILE_EXPORTS.join(", ")}`;
+  if (host.kind === "source") {
+    return `could not load Paseo's plugin compiler from the checkout ${host.root}: expected ${modules} in packages/server/src/server/plugins and installed node_modules. Run npm install in the checkout, or run \`ppd check --approx\` for the esbuild replica`;
+  }
+  return layoutMismatch(
+    `could not load Paseo's plugin compiler from the ${describeHost(host)}`,
+    `${modules} in Contents/Resources/${APP_PLUGINS}`,
+    host.version,
+    "Run `ppd check --approx` for the esbuild replica, or set PASEO_SOURCE to a getpaseo/paseo checkout",
+  );
 }
 
 /** Compiling dv-sized plugins takes seconds; evaluation inside gets the host's 30 s on top. */

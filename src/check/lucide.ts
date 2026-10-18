@@ -2,7 +2,8 @@
 // which shows up as a silently missing sidebar or Command Center item.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { PaseoHost } from "./compile.ts";
+import { layoutMismatch } from "../compat.ts";
+import { describeHost, type PaseoHost } from "./compile.ts";
 
 /** Exports the app refuses as icons even though lucide-react-native has them (packages/app/src/plugins/icons.ts). */
 const NOT_ICONS = new Set(["Icon", "createLucideIcon"]);
@@ -55,9 +56,12 @@ export function parseBundleIconNames(bundle: string): Set<string> {
   return names;
 }
 
+/** Where the app's web bundle lives, relative to Contents/Resources (Paseo 0.11.4). */
+export const APP_WEB_BUNDLES = "app-dist/_expo/static/js/web";
+
 /** The exact icon set of an installed Paseo app, read from its web bundle (app-dist). Null when not found. */
 export function appIconNames(resources: string): { names: Set<string>; source: string } | null {
-  const dir = join(resources, "app-dist/_expo/static/js/web");
+  const dir = join(resources, APP_WEB_BUNDLES);
   if (!existsSync(dir)) return null;
   for (const file of readdirSync(dir).filter((name) => /^index-.*\.js$/.test(name))) {
     const names = parseBundleIconNames(readFileSync(join(dir, file), "utf8"));
@@ -81,6 +85,22 @@ export function hostIconNames(host: PaseoHost | null, pluginDir: string): { name
   }
   const own = lucideIconNames([pluginDir]);
   return own ? { ...own, exact: false } : null;
+}
+
+/**
+ * Why the host's own icon list is not in use although a host was found (hostIconNames tries it first), or null.
+ * For the app this usually means its bundle layout changed.
+ */
+export function iconListProblem(host: PaseoHost | null, list: { exact: boolean } | null): string | null {
+  if (!host || list?.exact) return null;
+  const instead = list ? "Icons are checked against the plugin's own lucide-react-native instead" : "Icon names are not checked";
+  if (host.kind === "source") return `the Paseo checkout ${host.root} has no lucide-react-native type declarations (run npm install there). ${instead}`;
+  return layoutMismatch(
+    `could not read the Lucide icon list of the ${describeHost(host)}`,
+    `lucide-react-native's icon exports in Contents/Resources/${APP_WEB_BUNDLES}/index-*.js`,
+    host.version,
+    instead,
+  );
 }
 
 /** String literals passed as `icon` props or fields in client source: `icon: "FileText"`, `icon="FileText"`, `<Icon name="FileText"`. */

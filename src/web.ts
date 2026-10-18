@@ -5,9 +5,23 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { Browser, Locator, Page } from "playwright-core";
+import { ISSUES_URL, VERIFIED_PASEO } from "./compat.ts";
 import { requireDaemon, type DaemonRecord } from "./daemon.ts";
 import { runPaseo } from "./paseo.ts";
 import { UsageError } from "./usage.ts";
+
+/** Waits for a UI element ppd finds by label; a timeout says which label, since a newer web UI may rename it. */
+async function waitForUi(locator: Locator, what: string, timeout: number): Promise<void> {
+  try {
+    await locator.waitFor({ timeout });
+  } catch (error) {
+    if ((error as Error).name !== "TimeoutError") throw error;
+    throw new Error(
+      `the Paseo web UI did not show ${what} within ${timeout / 1000} s. ppd finds it by the labels of the Paseo ${VERIFIED_PASEO} web UI; a different version may have renamed it (please report it at ${ISSUES_URL})`,
+      { cause: error },
+    );
+  }
+}
 
 export interface Viewport {
   width: number;
@@ -102,11 +116,8 @@ export class PaseoWeb {
 
   /** Waits for the app shell: the sidebar on wide layouts, the menu button on compact ones. */
   async ready(timeoutMs = 60_000): Promise<void> {
-    await this.page
-      .getByLabel("New workspace", { exact: true })
-      .or(this.page.getByLabel("Open menu", { exact: true }))
-      .first()
-      .waitFor({ timeout: timeoutMs });
+    const shell = this.page.getByLabel("New workspace", { exact: true }).or(this.page.getByLabel("Open menu", { exact: true })).first();
+    await waitForUi(shell, 'its app shell (a "New workspace" or "Open menu" button)', timeoutMs);
   }
 
   /** Deep links work only after the app has registered the daemon, so the root loads first. */
@@ -118,7 +129,7 @@ export class PaseoWeb {
 
   async openWorkspace(serverId: string, workspaceId: string): Promise<void> {
     await this.gotoRoute(`/h/${serverId}/workspace/${workspaceId}`);
-    await this.page.getByLabel("Workspace actions", { exact: true }).first().waitFor({ timeout: 30_000 });
+    await waitForUi(this.page.getByLabel("Workspace actions", { exact: true }).first(), 'the workspace (a "Workspace actions" button)', 30_000);
   }
 
   /** An element by its exact accessible name, such as a plugin header button's label. */
@@ -143,7 +154,7 @@ export class PaseoWeb {
     } else {
       await this.page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
     }
-    await this.commandCenterInput().waitFor({ timeout: 10_000 });
+    await waitForUi(this.commandCenterInput(), 'the Command Center (a "Search commands" input)', 10_000);
   }
 
   /** Opens the Command Center, filters by text and selects the first matching item. */

@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { versionNote } from "./compat.ts";
 import { findPaseoBin, findWebDist, paseoVersion, runPaseo } from "./paseo.ts";
 import { FAKE_AGENT_DIR, FAKE_AGENT_ID } from "./fake-agent.ts";
 import { isPidAlive, isPortFree, processCommand, sleep, waitFor, which } from "./proc.ts";
@@ -125,6 +126,12 @@ export interface UpOptions {
   log?: (line: string) => void;
 }
 
+/** How ppd starts the daemon, for start failures: a Paseo release that changes these flags fails here. */
+function startHint(version: string | null): string {
+  const note = versionNote(version);
+  return `ppd ran \`paseo daemon run --home <home>\` with PASEO_HOME and PASEO_LISTEN set and a config.json in the home${note ? `; ${note}, so the daemon's flags or config may differ` : ""}.`;
+}
+
 export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
   const name = options.name ?? "default";
   const log = options.log ?? console.log;
@@ -182,7 +189,7 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
   writeDaemon(record);
 
   const ready = await waitFor(async () => {
-    if (!isPidAlive(child.pid!)) throw new Error(`dev daemon exited early:\n${tail(join(home, "daemon.out"))}`);
+    if (!isPidAlive(child.pid!)) throw new Error(`dev daemon exited early:\n${tail(join(home, "daemon.out"))}\n${startHint(record.paseoVersion)}`);
     return (await httpReady(`${record.url}/`)) ? true : null;
   }, options.timeoutMs ?? 90_000).catch(async (error: Error) => {
     await daemonDown({ name, log: () => {} });
@@ -191,7 +198,7 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
   if (!ready) {
     const output = tail(join(home, "daemon.out"));
     await daemonDown({ name, log: () => {} });
-    throw new Error(`dev daemon did not become ready on ${listen}:\n${output}`);
+    throw new Error(`dev daemon did not become ready on ${listen}:\n${output}\n${startHint(record.paseoVersion)}`);
   }
 
   if (options.caffeinate && process.platform === "darwin" && which("caffeinate")) {
@@ -206,6 +213,8 @@ export async function daemonUp(options: UpOptions = {}): Promise<DaemonRecord> {
   log(`  home:  ${home}`);
   log(`  pid:   ${record.pid}`);
   log(`  paseo: ${record.paseoVersion ?? "unknown version"}`);
+  const note = versionNote(record.paseoVersion);
+  if (note) log(`  note:  ${note}`);
   if (options.workspace) {
     const result = runPaseo(paseoBin, home, ["workspace", "create", "--isolation", "local", "--path", options.workspace, "--json"]);
     if (result.status !== 0) log(`warning: could not create a workspace for ${options.workspace}: ${result.stderr.trim()}`);

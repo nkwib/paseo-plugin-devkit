@@ -7,7 +7,8 @@ import { compileApprox, CompileError, compileLikePaseo, compileWithHost, describ
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
 import { cleanupWarning, DEFAULT_EVAL_TIMEOUT_MS, evaluateIsolated } from "./isolate.ts";
-import { hostIconNames, staticIconNames } from "./lucide.ts";
+import { hostIconNames, iconListProblem, staticIconNames } from "./lucide.ts";
+import { VERIFIED_PASEO } from "../compat.ts";
 import { manifestFindings } from "./manifest.ts";
 import { UsageError } from "../usage.ts";
 
@@ -107,7 +108,9 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       serverBundle = real.serverBundle;
       realEvalError = real.error;
     } else if (real.error) {
-      add("paseo-compile", "fail", `Paseo ${real.stage} failed: ${real.error.split("\n")[0]}`, real.error.split("\n").slice(1, 20));
+      // A load failure is about the host, and its first line already says so (hostLoadFailure).
+      const headline = real.stage === "load" ? real.error.split("\n")[0] : `Paseo ${real.stage} failed: ${real.error.split("\n")[0]}`;
+      add("paseo-compile", "fail", headline!, real.error.split("\n").slice(1, 20));
     } else {
       add("paseo-compile", "pass", `compilePlugin of the ${describeHost(host)} accepted the plugin`);
       clientBundle = real.clientBundle;
@@ -212,15 +215,17 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
   }
 
   const staticIcons = new Set(files.client.flatMap((file) => staticIconNames(readFileSync(file, "utf8"))));
+  const iconProblem = iconListProblem(host, lucide);
   if (!lucide) {
-    add("lucide-icons", "skip", `no Lucide list (${options.paseoApp === null ? "--approx turns off the app's list" : PASEO_SOURCE_MISSING}, and the plugin has no lucide-react-native); icons seen: ${[...new Set([...contributionIcons, ...staticIcons])].join(", ") || "none"}`);
+    const why = iconProblem ?? `no Lucide list (${options.paseoApp === null ? "--approx turns off the app's list" : PASEO_SOURCE_MISSING}, and the plugin has no lucide-react-native)`;
+    add("lucide-icons", iconProblem ? "warn" : "skip", `${why}; icons seen: ${[...new Set([...contributionIcons, ...staticIcons])].join(", ") || "none"}`);
   } else {
     const against = lucide.exact ? `${lucide.names.size} Lucide icons of the ${host ? describeHost(host) : "host"}` : `${lucide.names.size} icons of the plugin's own lucide-react-native (approximation: may differ from the app's version)`;
     const unknownContrib = [...contributionIcons].filter((icon) => !lucide.names.has(icon));
     const unknownStatic = [...staticIcons].filter((icon) => !contributionIcons.has(icon) && !lucide.names.has(icon));
     if (unknownContrib.length) add("lucide-icons", "fail", `unknown Lucide names in contributions (Paseo throws at registration): ${unknownContrib.join(", ")}`);
     else if (unknownStatic.length) add("lucide-icons", "warn", `unknown Lucide names in client source (Icon renders nothing): ${unknownStatic.join(", ")}`);
-    else add("lucide-icons", "pass", `${new Set([...contributionIcons, ...staticIcons]).size} icon name(s) valid against ${against}`);
+    else add("lucide-icons", iconProblem ? "warn" : "pass", `${new Set([...contributionIcons, ...staticIcons]).size} icon name(s) valid against ${against}`, iconProblem ? [iconProblem] : undefined);
   }
 
   const maxClient = options.maxClientBytes ?? DEFAULT_MAX_CLIENT_BYTES;
@@ -273,6 +278,13 @@ export async function checkCommand(args: string[]): Promise<number> {
   const app = values["paseo-app"];
   if (app && !findPaseoApp(app)) throw new Error(`${app} is not a Paseo desktop app: it needs Contents/Resources/app.asar and the Paseo Helper`);
   const paseoApp = values.approx ? null : (app ?? undefined);
+  // Environment overrides that point nowhere would otherwise fall through silently.
+  if (!values.approx && !explicit && process.env.PASEO_SOURCE && !paseoSource) {
+    console.error(`warning: PASEO_SOURCE=${process.env.PASEO_SOURCE} is not a usable Paseo checkout (it needs ${PASEO_COMPILER} and node_modules)`);
+  }
+  if (!values.approx && !app && process.env.PASEO_APP && !findPaseoApp(process.env.PASEO_APP)) {
+    console.error(`warning: PASEO_APP=${process.env.PASEO_APP} is not a Paseo desktop app (it needs Contents/Resources/app.asar and the Paseo Helper, as in Paseo ${VERIFIED_PASEO})`);
+  }
   const kib = (flag: "max-client-kb" | "max-server-kb") => {
     const value = values[flag];
     if (value === undefined) return undefined;
@@ -308,7 +320,9 @@ export async function checkClient(pluginDir: string, options: CheckOptions = {})
   const dir = resolve(pluginDir);
   const entry = findEntries(dir).client;
   if (!entry) return null;
-  const lucide = hostIconNames(findPaseoHost(options), dir);
+  const host = findPaseoHost(options);
+  const lucide = hostIconNames(host, dir);
+  const iconProblem = iconListProblem(host, lucide);
   let bundle: string;
   try {
     bundle = await compileLikePaseo(entry, "client");
@@ -324,7 +338,7 @@ export async function checkClient(pluginDir: string, options: CheckOptions = {})
   const notes = [
     ...(result.setupError ? [`contribution threw under stub host modules (may be a stub limit): ${result.setupError}`] : []),
     ...(cleanupWarning(result) ? [cleanupWarning(result)!] : []),
-    ...(iconSource ? [] : ["icon names not checked: no Lucide list found"]),
+    ...(iconProblem ? [iconProblem] : iconSource ? [] : ["icon names not checked: no Lucide list found"]),
   ];
   return { errors: result.contractErrors, notes, iconSource };
 }

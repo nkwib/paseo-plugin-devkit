@@ -2,7 +2,8 @@
 // per prompt. `ppd daemon up --fake-agent` installs it; these helpers drive turns from tests.
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findPaseoApp } from "./check/compile.ts";
+import { describeHost, findPaseoApp } from "./check/compile.ts";
+import { layoutMismatch } from "./compat.ts";
 import { requireDaemon } from "./daemon.ts";
 import { runPaseo } from "./paseo.ts";
 import { run } from "./proc.ts";
@@ -101,6 +102,17 @@ export function agentTimeline(agentId: string, options: { name?: string; timeout
     env: { ...devDaemonEnv(process.env, daemon.home), ELECTRON_RUN_AS_NODE: "1" },
     timeout: options.timeoutMs ?? 60_000,
   });
+  const layout = /^ppd-layout: (.*)$/m.exec(result.stderr)?.[1];
+  if (layout) {
+    throw new Error(
+      layoutMismatch(
+        `could not read the timeline of ${agentId} with the client in the ${describeHost({ kind: "app", ...app })}`,
+        "@getpaseo/client/dist/daemon-client.js, @getpaseo/client/dist/index.js and ws/wrapper.mjs in Contents/Resources/app.asar/node_modules",
+        app.version,
+        `Detail: ${layout}`,
+      ),
+    );
+  }
   if (result.status !== 0) throw new Error(`could not read the timeline of ${agentId}: ${(result.stderr || result.stdout).trim()}`);
   return JSON.parse(result.stdout) as TimelineRow[];
 }
