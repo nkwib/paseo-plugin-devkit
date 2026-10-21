@@ -3,7 +3,7 @@
 // verified on one Paseo release; a different release may move things.
 
 /** The Paseo release whose app layout, daemon flags and web UI labels ppd was verified on. */
-export const VERIFIED_PASEO = "0.11.4";
+export const VERIFIED_PASEO = "0.12.0";
 
 export const ISSUES_URL = "https://github.com/nkwib/paseo-plugin-devkit/issues";
 

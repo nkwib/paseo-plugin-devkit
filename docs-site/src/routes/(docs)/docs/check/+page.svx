@@ -63,10 +63,10 @@ The panel template with two typical mistakes: an icon name the app's Lucide buil
 small `class` in the client.
 
 ```text
-PASS  manifest         my-plugin, requires paseo >=0.11.4
+PASS  manifest         my-plugin, requires paseo >=0.12.0
 PASS  imports          client, server and shared boundaries hold
 PASS  dependencies     no runtime packages
-PASS  paseo-compile    compilePlugin of the Paseo 0.11.4 app (/Applications/Paseo.app) accepted the plugin
+PASS  paseo-compile    compilePlugin of the Paseo 0.12.0 app (/Applications/Paseo.app) accepted the plugin
 PASS  client-requires  client requires only host modules (@getpaseo/plugin, @getpaseo/plugin/client, react, react-native, react/jsx-runtime, zod)
 PASS  server-requires  server requires only host modules and Node built-ins
 PASS  server-eval      Paseo's evaluator ran the contribution in 0 ms; RPCs: hello.greet

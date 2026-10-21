@@ -9,7 +9,7 @@ dev daemon "default" up
   url:   http://127.0.0.1:7800
   home:  $TMPDIR/ppd-default-2kCaQs
   pid:   84941
-  paseo: 0.11.4
+  paseo: 0.12.0
 workspace created for ~/code/my-plugin
 <span class="prompt">$</span> npx ppd check | tail -1
 <span class="good">13 passed, 0 warnings, 0 failed, 0 skipped</span>
