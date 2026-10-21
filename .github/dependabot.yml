@@ -10,6 +10,10 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # Node 22 types, as in engines. ppd create copies this pin into plugins, and 26 broke their installs (getpaseo/paseo#7145).
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /docs-site
     schedule:
