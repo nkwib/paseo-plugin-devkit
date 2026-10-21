@@ -1,13 +1,15 @@
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { assertWithinRpcBudget, measureRpc } from "../src/check/budget.ts";
 import { bundleRequires, disallowedClientRequires, disallowedServerRequires, evaluateClientBundle, evaluateServerBundle } from "../src/check/bundle.ts";
 import { compileLikePaseo, findPaseoApp, findPaseoSource } from "../src/check/compile.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "../src/check/hermes.ts";
-import { runChecks } from "../src/check/index.ts";
+import { ClientRules } from "../src/check/client-rules.ts";
+import { checkClient, runChecks } from "../src/check/index.ts";
 import { manifestFindings } from "../src/check/manifest.ts";
 import { appIconNames, parseBundleIconNames, parseLucideNames, staticIconNames } from "../src/check/lucide.ts";
-import { EXAMPLE, FIXTURES } from "./helpers.ts";
+import { EXAMPLE, FIXTURES, scratch } from "./helpers.ts";
 
 const GOOD = EXAMPLE;
 const BAD = join(FIXTURES, "bad-plugin");
@@ -64,6 +66,100 @@ describe("compiled fixtures", () => {
   it("finds class syntax that Hermes rejects", async () => {
     expect(await classSyntaxErrors(await compileLikePaseo(join(GOOD, "index.client.tsx"), "client"))).toEqual([]);
     expect((await classSyntaxErrors(await compileLikePaseo(join(BAD, "index.client.tsx"), "client"))).length).toBeGreaterThan(0);
+  });
+});
+
+describe("file panels (evaluate.ts addFilePanel, getpaseo/paseo#7411)", () => {
+  const Component = () => null;
+  const panel = (patch: Record<string, unknown> = {}) => ({ id: "pdf", title: "PDF", icon: "FileText", files: { extensions: ["pdf"] }, Component, ...patch });
+  const errors = (...panels: unknown[]) => {
+    const rules = new ClientRules(new Set(["FileText"]));
+    for (const contribution of panels) rules.register("addFilePanel", [contribution]);
+    return rules.errors;
+  };
+
+  it("accepts extension, filename and mixed selectors, and Lucide, SVG or component icons", () => {
+    expect(
+      errors(
+        panel(),
+        panel({ id: "make", files: { extensions: [], filenames: ["Makefile", "Dockerfile"] } }),
+        panel({ id: "docs", files: { extensions: ["md", "MDX"], filenames: ["README"] } }),
+        panel({ id: "svg", icon: { svg: "<svg></svg>" } }),
+        panel({ id: "drawn", icon: Component }),
+      ),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ["no selector", undefined],
+    ["an unknown key", { extensions: ["pdf"], globs: ["*.pdf"] }],
+    ["no extensions list", { filenames: ["Makefile"] }],
+    ["a leading dot", { extensions: [".pdf"] }],
+    ["a dotted extension", { extensions: ["tar.gz"] }],
+    ["an empty entry", { extensions: [""] }],
+    ["an untrimmed entry", { extensions: [" pdf"] }],
+    ["a non-string entry", { extensions: [1] }],
+    ["a path", { extensions: [], filenames: ["docs/README"] }],
+    ["a backslash", { extensions: [], filenames: ["docs\\README"] }],
+    ["a glob", { extensions: ["*"] }],
+    ["a wildcard", { extensions: [], filenames: ["READ?E"] }],
+    ["filenames that are not a list", { extensions: ["pdf"], filenames: "README" }],
+    ["no entries", { extensions: [], filenames: [] }],
+  ])("rejects a selector with %s", (_, files) => {
+    expect(errors(panel({ files }))).toEqual(["File panel pdf has invalid selector"]);
+  });
+
+  it("rejects a bad or duplicate id, no title, a bad icon and a memo component, like the app", () => {
+    const memo = { $$typeof: Symbol.for("react.memo"), type: Component, compare: null };
+    expect(
+      errors(
+        panel(),
+        panel(),
+        panel({ id: "Bad_Id" }),
+        panel({ id: "untitled", title: " " }),
+        panel({ id: "unknown-icon", icon: "NotAnIcon" }),
+        panel({ id: "no-icon", icon: " " }),
+        panel({ id: "odd-icon", icon: 1 }),
+        panel({ id: "memo", Component: memo }),
+      ),
+    ).toEqual([
+      "Duplicate file panel: pdf",
+      "Invalid file panel id: Bad_Id",
+      "File panel untitled has no title",
+      "Unknown Lucide icon: NotAnIcon",
+      "File panel no-icon has no icon",
+      "File panel odd-icon has an invalid icon: expected a Lucide icon name, { svg }, or a component",
+      "File panel memo is not a component",
+    ]);
+  });
+});
+
+describe("client methods newer than the oldest app requirements.paseo admits", () => {
+  const call = 'client.addFilePanel({ id: "pdf", title: "PDF", icon: "FileText", files: { extensions: ["pdf"] }, Component: () => null })';
+  const plugin = (range: string, body: string) => {
+    const dir = scratch("ppd-file-panel-");
+    writeFileSync(join(dir, "paseo-plugin.json"), JSON.stringify({ id: "file-panel", requirements: { paseo: range } }));
+    writeFileSync(join(dir, "index.client.ts"), `export default function contribute(client: any) {\n  ${body};\n  return () => {};\n}\n`);
+    return dir;
+  };
+  const clientEval = async (dir: string) => (await runChecks(dir, { paseoSource: null, paseoApp: null })).find((r) => r.id === "client-eval");
+
+  it("warns when an app the range admits lacks the method and the call is unguarded", async () => {
+    const dir = plugin(">=0.11.2", call);
+    const warning =
+      'on Paseo before 0.13.0, which requirements.paseo ">=0.11.2" admits, client.addFilePanel is undefined and the contribution throws, so those apps show none of this client. Declare ">=0.13.0" or guard with typeof client.addFilePanel === "function"';
+    expect(await clientEval(dir)).toEqual({
+      id: "client-eval",
+      status: "warn",
+      message: warning,
+      details: ["error on those apps: client.addFilePanel is not a function", "contributions: addFilePanel"],
+    });
+    expect((await checkClient(dir, { paseoSource: null, paseoApp: null }))?.notes).toContain(warning);
+  });
+
+  it("passes a guarded call, and an unguarded one when the range starts at the release that added it", async () => {
+    expect(await clientEval(plugin(">=0.11.2", `if (typeof client.addFilePanel === "function") ${call}`))).toMatchObject({ status: "pass" });
+    expect(await clientEval(plugin(">=0.13.0", call))).toMatchObject({ status: "pass", message: "contributions: addFilePanel" });
   });
 });
 

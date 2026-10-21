@@ -10,8 +10,9 @@ License, Version 2.0. Those portions remain under the Apache License, Version
 Paseo
 https://github.com/getpaseo/paseo
 Copyright (c) 2025-present Mohamed Boudra
-Source revision: 9bd58f66b2dfc195898bf1178e84f02933c0d41e
-Paseo does not ship a NOTICE file at this revision.
+Source revision: 9bd58f66b2dfc195898bf1178e84f02933c0d41e, and
+e464fd3bd308e792cd2cf484bd543057b50cb867 (getpaseo/paseo#7411) where marked
+below. Paseo does not ship a NOTICE file at either revision.
 
 Files with adapted portions, and the Paseo files they come from. Every file
 listed here starts with a notice naming its sources and describing how it was
@@ -20,6 +21,8 @@ under dist/ (for example dist/check/client-rules.js), and the notices are kept.
 
   src/check/client-rules.ts
       packages/app/src/plugins/evaluate.ts
+      packages/app/src/plugins/evaluate.ts at e464fd3 (addFilePanel)
+      packages/app/src/plugins/icons.ts at e464fd3 (parsePluginIcon)
   src/check/manifest.ts
       packages/server/src/server/plugins/manifest.ts
       packages/protocol/src/plugin-config.ts
@@ -41,7 +44,7 @@ under dist/ (for example dist/check/client-rules.js), and the notices are kept.
       plugin-examples/provider-direct/server/provider.ts
 
 The Paseo license, reproduced verbatim from the LICENSE file at the source
-revision above:
+revisions above (it is the same at both):
 
 --------------------------------------------------------------------------------
 

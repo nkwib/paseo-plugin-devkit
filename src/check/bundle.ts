@@ -171,6 +171,8 @@ export interface ClientEvaluationOptions {
   settleMs?: number;
   /** The app's Lucide names. When given, unknown contribution icons are contract errors, like in the app. */
   icons?: ReadonlySet<string> | null;
+  /** Client methods left undefined, like on an app that predates them (CLIENT_METHOD_SINCE). */
+  absentMethods?: readonly string[];
 }
 
 /** Icon names in a contribution: `icon` fields up to two levels deep (header buttons nest them). */
@@ -205,7 +207,7 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, op
     {},
     {
       get: (_, key) => {
-        if (typeof key !== "string") return undefined;
+        if (typeof key !== "string" || options.absentMethods?.includes(key)) return undefined;
         if (/^add[A-Z]/.test(key)) {
           return (...args: unknown[]) => {
             rules.register(key, args);

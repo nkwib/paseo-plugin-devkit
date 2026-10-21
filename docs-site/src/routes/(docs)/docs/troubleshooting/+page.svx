@@ -32,6 +32,8 @@ prints the same lines and keeps watching. Each line under `client:` is a registr
 
 - `Unknown Lucide icon: X`: the app's Lucide build has no icon named X.
 - `Command Center item X has no icon`, `Workspace panel X has invalid context`, `Screen X is not a component`.
+- `File panel X has invalid selector`: `files` takes only `extensions` (without the dot) and `filenames`, plain
+  names with no `/`, `\`, `*` or `?`, at least one in all.
 - `client.X is not part of the app's plugin client context (calling it throws)`.
 - `Plugin contribution must return a cleanup function`.
 
@@ -88,6 +90,19 @@ Plugin code runs in a child process with a time limit: 30 s for the client, and 
 approximation; with the app or a checkout the server is evaluated inside the compile step, which has 120 s. A
 blocking loop at module load or in `contribute` ends here. `plugin code called process.exit(N)` means what it says: the host would
 lose the whole plugin process. A timer or server left running after the cleanup is a warning, not a failure.
+
+<h3 id="older-paseo">on Paseo before 0.13.0, client.addFilePanel is undefined</h3>
+
+```text
+WARN  client-eval      on Paseo before 0.13.0, which requirements.paseo ">=0.11.2" admits, client.addFilePanel is undefined and the contribution throws, so those apps show none of this client. Declare ">=0.13.0" or guard with typeof client.addFilePanel === "function"
+      error on those apps: client.addFilePanel is not a function
+      contributions: addFilePanel
+```
+
+File panels arrived in Paseo 0.13.0. On an older app the call throws and the app drops the whole client, while apps
+below `requirements.paseo` skip the plugin. Declare `"paseo": ">=0.13.0"`, or register the panel only when
+`typeof client.addFilePanel === "function"` to keep older apps. `ppd install` and `ppd dev` print the same text as a
+`note:` line.
 
 <h2 id="daemon">Dev daemon</h2>
 
