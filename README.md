@@ -245,7 +245,7 @@ Or for one plugin repo: copy the same directory into the repo's `.claude/skills/
 - run: npx ppd registry precheck
 ```
 
-It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and runs `ppd check` with the latest SDK, so upstream changes break your CI before they break your users. This repo's own [CI](.github/workflows/ci.yml) runs typecheck, tests, a CLI smoke test and a package check on Node 22 and 24, builds the docs site, and runs the test suite weekly against Paseo main.
+It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and runs `ppd check` with the latest SDK, so upstream changes break your CI before they break your users. This repo's own [CI](.github/workflows/ci.yml) runs typecheck, tests, a CLI smoke test and a package check on Node 22 and 24, builds the docs site, and every week runs the test suite against Paseo main and checks that ppd is verified on the latest Paseo release.
 
 ## Compatibility
 

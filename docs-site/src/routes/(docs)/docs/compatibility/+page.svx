@@ -51,5 +51,6 @@ note:  ppd was verified on Paseo <verified>; this is <found>
 
 The devkit's CI runs its test suite every week against a fresh build of Paseo main (`PASEO_SOURCE`), and
 [`examples/ci.yml`](https://github.com/nkwib/paseo-plugin-devkit/blob/main/examples/ci.yml) does the same for your
-plugin. When something breaks, an issue with the message helps:
+plugin. A second weekly job fails once Paseo's latest release is no longer {meta.verifiedPaseo}, until ppd is verified on
+the new one. When something breaks, an issue with the message helps:
 [nkwib/paseo-plugin-devkit/issues](https://github.com/nkwib/paseo-plugin-devkit/issues).

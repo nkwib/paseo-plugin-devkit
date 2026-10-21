@@ -5,7 +5,7 @@ on:
     branches: [main]
   pull_request:
   schedule:
-    - cron: "0 6 * * 1" # weekly: the paseo-main job catches upstream drift
+    - cron: "0 6 * * 1" # weekly: upstream drift (paseo-main) and new Paseo releases (verified-paseo)
   workflow_dispatch:
 
 permissions:
@@ -96,3 +96,19 @@ jobs:
         run: npm ci && npm run build:client && npm run build:plugin
       - working-directory: devkit
         run: npm ci && npm test
+
+  verified-paseo:
+    name: verified on the latest Paseo release
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh release view --repo getpaseo/paseo --json tagName --jq '.tagName | ltrimstr("v")')
+          verified=$(sed -n 's/^export const VERIFIED_PASEO = "\(.*\)";$/\1/p' src/compat.ts)
+          if [ "$latest" != "$verified" ]; then
+            echo "::error::Paseo $latest is out and ppd is verified on ${verified:-?}: run PPD_E2E=1 npm test and ppd web with Paseo $latest on a Mac, then bump VERIFIED_PASEO in src/compat.ts"
+            exit 1
+          fi
