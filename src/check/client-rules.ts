@@ -10,6 +10,8 @@
 // The app's client registration rules. The app throws on the first violation and the whole plugin client fails
 // to evaluate; the only trace is a console.warn("[Plugins] Failed to evaluate ..."). Here every violation is
 // collected instead.
+import intersects from "semver/ranges/intersects.js";
+import validRange from "semver/ranges/valid.js";
 
 const CONTRIBUTION_ID = /^[a-z][a-z0-9-]*$/;
 const PANEL_LOCATIONS = ["workspace", "explorer"];
@@ -41,6 +43,24 @@ const text = (value: unknown): string => (typeof value === "string" ? value.trim
 const isFunction = (value: unknown): boolean => typeof value === "function";
 const isComponentType = (value: unknown): boolean =>
   typeof value === "function" || (typeof value === "object" && value !== null && "$$typeof" in value);
+
+/**
+ * Client context methods that only newer apps have, with the release that added each. Older apps leave them undefined.
+ * Source: public-docs/plugins/reference.md (addFilePanel: "File panels", getpaseo/paseo#7411).
+ */
+export const CLIENT_METHOD_SINCE = new Map([["addFilePanel", "0.13.0"]]);
+
+/**
+ * The methods among `called` that some app admitted by `range` predates. Apps below the range skip the plugin before
+ * evaluating it, so only the range matters. Empty for a missing or invalid range (the manifest check reports it).
+ */
+export function methodsMissingIn(range: unknown, called: Iterable<string>): string[] {
+  if (typeof range !== "string" || validRange(range) === null) return [];
+  return [...new Set(called)].filter((method) => {
+    const since = CLIENT_METHOD_SINCE.get(method);
+    return since !== undefined && intersects(range, `<${since}`);
+  });
+}
 
 const selectorEntries = (entries: unknown, extension: boolean): entries is string[] =>
   Array.isArray(entries) &&

@@ -2,8 +2,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import compareVersions from "semver/functions/compare.js";
 import { bundleRequires, disallowedClientRequires, disallowedServerRequires, formatKb, sizeReport } from "./bundle.ts";
 import { compileApprox, CompileError, compileLikePaseo, compileWithHost, describeHost, findEntries, findPaseoApp, findPaseoHost, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
+import { CLIENT_METHOD_SINCE, methodsMissingIn } from "./client-rules.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
 import { cleanupWarning, DEFAULT_EVAL_TIMEOUT_MS, evaluateIsolated } from "./isolate.ts";
@@ -43,6 +45,40 @@ interface Manifest {
   build?: unknown;
   icon?: unknown;
   [key: string]: unknown;
+}
+
+interface ClientRun {
+  contributions: string[];
+  contractErrors: string[];
+  setupError: string | null;
+}
+
+/**
+ * Apps below `requirements.paseo` skip the plugin, but one the range admits may predate a client method the
+ * contribution calls. The method is undefined there, and an unguarded call stops the whole client. Evaluates the
+ * client once more without those methods; null when it still runs, or when the first run already failed or threw.
+ */
+async function olderAppWarning(bundle: string, dir: string, range: unknown, run: ClientRun, timeoutMs: number): Promise<{ message: string; thrown: string } | null> {
+  if (run.contractErrors.length || run.setupError) return null;
+  const missing = methodsMissingIn(range, run.contributions);
+  if (!missing.length) return null;
+  const outcome = await evaluateIsolated("client", bundle, dir, { timeoutMs, absentMethods: missing });
+  const result = outcome.ok && !("error" in outcome.result) && outcome.result.target === "client" ? outcome.result : null;
+  if (!result?.setupError) return null;
+  const since = missing.map((method) => CLIENT_METHOD_SINCE.get(method)!).sort(compareVersions).at(-1);
+  const methods = missing.map((method) => `client.${method}`);
+  return {
+    message: `on Paseo before ${since}, which requirements.paseo "${String(range)}" admits, ${methods.join(", ")} ${methods.length > 1 ? "are" : "is"} undefined and the contribution throws, so those apps show none of this client. Declare ">=${since}" or guard with ${methods.map((method) => `typeof ${method} === "function"`).join(", ")}`,
+    thrown: result.setupError,
+  };
+}
+
+function manifestRange(dir: string): unknown {
+  try {
+    return JSON.parse(readFileSync(resolve(dir, "paseo-plugin.json"), "utf8"))?.requirements?.paseo;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function runChecks(pluginDir: string, options: CheckOptions = {}): Promise<CheckResult[]> {
@@ -186,8 +222,10 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       else if (result.target === "client") {
         result.icons.forEach((icon) => contributionIcons.add(icon));
         const summary = `contributions: ${result.contributions.join(", ") || "none"}`;
+        const olderApp = await olderAppWarning(clientBundle, dir, manifest.requirements?.paseo, result, evalTimeoutMs);
         if (result.contractErrors.length) add("client-eval", "fail", "the app would reject this plugin client and show none of its UI", [...result.contractErrors, summary]);
         else if (result.setupError) add("client-eval", "warn", `contribution threw under stub host modules (may be a stub limit): ${result.setupError}`, [summary]);
+        else if (olderApp) add("client-eval", "warn", olderApp.message, [`error on those apps: ${olderApp.thrown}`, summary]);
         else if (cleanupWarning(result)) add("client-eval", "warn", cleanupWarning(result)!, [summary]);
         else add("client-eval", "pass", summary);
       }
@@ -329,14 +367,17 @@ export async function checkClient(pluginDir: string, options: CheckOptions = {})
   } catch (error) {
     return { errors: [`client compile failed: ${(error as Error).message}`], notes: [], iconSource: null };
   }
-  const outcome = await evaluateIsolated("client", bundle, dir, { timeoutMs: options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS, icons: lucide?.names ?? null });
+  const timeoutMs = options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS;
+  const outcome = await evaluateIsolated("client", bundle, dir, { timeoutMs, icons: lucide?.names ?? null });
   const iconSource = lucide?.source ?? null;
   if (!outcome.ok) return { errors: [outcome.error], notes: [], iconSource };
   const result = outcome.result;
   if ("error" in result) return { errors: [result.error], notes: [], iconSource };
   if (result.target !== "client") return null;
+  const olderApp = await olderAppWarning(bundle, dir, manifestRange(dir), result, timeoutMs);
   const notes = [
     ...(result.setupError ? [`contribution threw under stub host modules (may be a stub limit): ${result.setupError}`] : []),
+    ...(olderApp ? [olderApp.message] : []),
     ...(cleanupWarning(result) ? [cleanupWarning(result)!] : []),
     ...(iconProblem ? [iconProblem] : iconSource ? [] : ["icon names not checked: no Lucide list found"]),
   ];
