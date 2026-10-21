@@ -1,8 +1,11 @@
 // Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e:
 //   packages/app/src/plugins/evaluate.ts
+// The addFilePanel rules are adapted at commit e464fd3bd308e792cd2cf484bd543057b50cb867 (getpaseo/paseo#7411):
+//   packages/app/src/plugins/evaluate.ts, packages/app/src/plugins/icons.ts (parsePluginIcon)
 // Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
 // Modified: the registration checks are rewritten as a standalone class with no app or React dependencies, take the
-// icon set as a parameter, and collect every violation instead of throwing on the first.
+// icon set as a parameter, and collect every violation instead of throwing on the first; icons skip the SVG markup
+// check.
 //
 // The app's client registration rules. The app throws on the first violation and the whole plugin client fails
 // to evaluate; the only trace is a console.warn("[Plugins] Failed to evaluate ..."). Here every violation is
@@ -22,6 +25,7 @@ export const CLIENT_CONTEXT_METHODS = new Set([
   "addSidebarFooterItem",
   "addSurface",
   "addSidebarItem",
+  "addFilePanel",
   "addWorkspacePanel",
   "addCommandCenterItem",
   "addSlashCommand",
@@ -37,6 +41,17 @@ const text = (value: unknown): string => (typeof value === "string" ? value.trim
 const isFunction = (value: unknown): boolean => typeof value === "function";
 const isComponentType = (value: unknown): boolean =>
   typeof value === "function" || (typeof value === "object" && value !== null && "$$typeof" in value);
+
+const selectorEntries = (entries: unknown, extension: boolean): entries is string[] =>
+  Array.isArray(entries) &&
+  entries.every((entry) => typeof entry === "string" && entry.trim() === entry && entry.length > 0 && !/[\\/*?]/.test(entry) && (!extension || !entry.includes(".")));
+
+/** A file panel's `files`: only `extensions` (no dots) and optional `filenames`, plain names, at least one in all. */
+function validFileSelector(files: unknown): boolean {
+  if (!files || typeof files !== "object") return false;
+  const { extensions, filenames = [], ...rest } = files as Record<string, unknown>;
+  return Object.keys(rest).length === 0 && selectorEntries(extensions, true) && selectorEntries(filenames, false) && extensions.length + filenames.length > 0;
+}
 
 /**
  * Validates registrations like the app's evaluate.ts. `icons` is the app's Lucide name set; null skips the
@@ -78,6 +93,17 @@ export class ClientRules {
     if (!this.icons) return;
     const icon = text(name);
     if (!this.icons.has(icon)) this.fail(`Unknown Lucide icon: ${String(name)}`);
+  }
+
+  /** parsePluginIcon: a component, `{ svg }` or a Lucide name. The SVG markup itself is not checked. */
+  private pluginIcon(owner: string, icon: unknown): void {
+    if (isComponentType(icon)) return;
+    if (typeof icon === "string") {
+      if (icon.trim()) this.icon(icon);
+      else this.fail(`${owner} has no icon`);
+    } else if (typeof (icon as { svg?: unknown } | null)?.svg !== "string") {
+      this.fail(`${owner} has an invalid icon: expected a Lucide icon name, { svg }, or a component`);
+    }
   }
 
   private sidebarItem(section: "header" | "footer", c: Contribution): void {
@@ -124,6 +150,16 @@ export class ClientRules {
         this.unique("sidebar-header", id, "Duplicate sidebar header item");
         if (!text(c.title)) this.fail(`Sidebar item ${id} has no title`);
         if (surface) this.legacySidebarSurfaces.push({ id, surface });
+        return;
+      }
+      case "addFilePanel": {
+        const id = this.id(c.id, "file panel id");
+        if (!id) return;
+        this.unique("file-panel", id, "Duplicate file panel");
+        if (!text(c.title)) this.fail(`File panel ${id} has no title`);
+        this.pluginIcon(`File panel ${id}`, c.icon);
+        if (!validFileSelector(c.files)) this.fail(`File panel ${id} has invalid selector`);
+        if (!isFunction(c.Component)) this.fail(`File panel ${id} is not a component`);
         return;
       }
       case "addWorkspacePanel": {
