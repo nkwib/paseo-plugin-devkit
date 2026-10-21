@@ -1,6 +1,6 @@
 # Paseo plugin host contract
 
-What Paseo 0.11 actually gives a plugin at runtime. `ppd check` tests the rows marked (checked).
+What Paseo 0.11 and 0.12 actually give a plugin at runtime. `ppd check` tests the rows marked (checked).
 
 | Area | Contract | What to do |
 | --- | --- | --- |

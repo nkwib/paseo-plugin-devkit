@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Verified on Paseo 0.12.0: `ppd daemon up` and `ppd doctor` no longer print the version note on it.
+
 ## 0.1.0 (2026-10-18)
 
 First public release. Verified on macOS with Paseo 0.11.4.

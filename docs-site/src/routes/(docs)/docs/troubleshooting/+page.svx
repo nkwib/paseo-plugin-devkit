@@ -1,5 +1,6 @@
 <script>
   import PageMeta from '#lib/components/PageMeta.svelte';
+  import { meta } from '#lib/generated/meta.js';
 </script>
 
 <PageMeta
@@ -58,7 +59,7 @@ build options. That is expected on Linux CI. On a Mac, install Paseo or point `P
 <h3 id="layout">could not load Paseo's plugin compiler</h3>
 
 ```text
-FAIL  paseo-compile    could not load Paseo's plugin compiler from the Paseo 0.12.0 app (/Applications/Paseo.app): expected ... ppd was verified on Paseo 0.11.4 and found 0.12.0, so this release may lay things out differently. Run `ppd check --approx` for the esbuild replica, or set PASEO_SOURCE to a getpaseo/paseo checkout. Please report it at ...
+FAIL  paseo-compile    could not load Paseo's plugin compiler from the Paseo 0.13.0 app (/Applications/Paseo.app): expected ... ppd was verified on Paseo 0.12.0 and found 0.13.0, so this release may lay things out differently. Run `ppd check --approx` for the esbuild replica, or set PASEO_SOURCE to a getpaseo/paseo checkout. Please report it at ...
 ```
 
 ppd reads the compiler, the evaluator and the Lucide list from inside the installed app, which is not a public API.
@@ -156,11 +157,12 @@ runs in several directories leave several.
 <h3 id="web-labels">The web UI did not show ...</h3>
 
 ```text
-the Paseo web UI did not show the workspace (a "Workspace actions" button) within 30 s. ppd finds it by the labels of the Paseo 0.11.4 web UI; a different version may have renamed it ...
+the Paseo web UI did not show the workspace (a "Workspace actions" button) within 30 s. ppd finds it by the labels of the Paseo 0.12.0 web UI; a different version may have renamed it ...
 ```
 
 `ppd web` finds the app shell, workspaces and the Command Center by their accessible names. On a Paseo other than
-0.11.4 a renamed label ends here; please report it. On 0.11.4, retry with `--headed` to watch what the page does.
+{meta.verifiedPaseo} a renamed label ends here; please report it. On {meta.verifiedPaseo}, retry with `--headed` to
+watch what the page does.
 
 <h2 id="fake-agent">Fake agent</h2>
 
