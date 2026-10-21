@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Verified on Paseo 0.12.0: `ppd daemon up` and `ppd doctor` no longer print the version note on it.
+- `ppd check` applies the app's file panel rules (`client.addFilePanel`, Paseo 0.13.0, getpaseo/paseo#7411): id, title, icon, `files` selector and a function `Component`. Before, every plugin that called it failed `client-eval`.
+- `client-eval` warns when `requirements.paseo` admits a Paseo release that lacks a client method the plugin calls without a guard (`addFilePanel` before 0.13.0): the call throws there and the app drops the whole client. `ppd install` and `ppd dev` print the same warning as a note.
 
 ## 0.1.0 (2026-10-18)
 
