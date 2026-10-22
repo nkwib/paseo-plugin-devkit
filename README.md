@@ -251,6 +251,24 @@ It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and run
 
 Verified on macOS with Paseo 0.12.0 (desktop app and CLI). CI runs on Linux without Paseo, where daemon tests skip and `ppd check` runs as an approximation.
 
+### React Native, React and Dependabot
+
+Paseo supplies React Native, React, the plugin SDK, TanStack Query and Zod at runtime. A plugin's development dependencies provide local types and tooling; upgrading them does not upgrade the app's renderer. Keep their versions aligned with the oldest Paseo app you support. `requirements.paseo` declares supported app and daemon versions; there is no separate React Native requirement in the plugin manifest. An SDK peer range is an installation constraint, not a tested runtime compatibility matrix.
+
+Do not automatically merge React Native minor-series upgrades. React Native can introduce breaking changes in `0.x` minor releases. Review React, React Native and SDK updates together, run an ordinary dependency install without bypassing peers, then typecheck, test, compile against the supported host and exercise the changed UI. Passing `ppd check` alone does not establish matching types or renderer compatibility. Use the oldest supported host's Hermes binaries through `HERMESC` and `HERMES` when validating that host; a newer development dependency's engine is not equivalent.
+
+Exact pins do not stop Dependabot from proposing manifest changes. To keep automated version PRs within the current React Native series, add this under the relevant npm entry in `dependabot.yml`:
+
+```yaml
+ignore:
+  - dependency-name: react-native
+    update-types:
+      - version-update:semver-minor
+      - version-update:semver-major
+```
+
+Review a series upgrade explicitly when the supported host and its React/SDK constraints permit it. This snippet does not configure auto-merge. See the [compatibility guide](https://paseo-plugin-devkit.pages.dev/docs/compatibility#host-dependencies) for the dependency experiment and evidence limits.
+
 `ppd` relies on parts of Paseo that are not a public API. When one of them moves in a new Paseo release, `ppd` says what it expected instead of blaming your plugin:
 
 | Relies on | Used by | When it changes |

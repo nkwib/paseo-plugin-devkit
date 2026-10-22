@@ -29,6 +29,61 @@ Paseo that are not a public API, and says so when one of them moves instead of b
 macOS and Linux. On Linux (CI), there is no Paseo app: daemon tests skip and `ppd check` is an approximation.
 Windows is not supported.
 
+<h2 id="host-dependencies">React Native, React and dependency updates</h2>
+
+Paseo supplies React Native, React, the plugin SDK, TanStack Query and Zod at runtime. Their development
+dependencies give your editor and TypeScript a local API surface. Updating them does not replace the app's
+runtime or renderer. Match the oldest Paseo app you support, rather than selecting the newest React Native
+release independently. The manifest's `requirements.paseo` covers both the daemon and each connected app;
+it has no separate React Native key. SDK peer ranges constrain package installation, not verified host/API
+compatibility.
+
+React Native's [versioning policy](https://reactnative.dev/releases/versioning-policy) permits breaking changes
+in `0.x` minor releases. Treat a new minor series as a migration. Review React, React Native and SDK versions
+together; do not bypass conflicting peers to make CI green. Exact package pins do not stop Dependabot from
+proposing new versions. This optional rule keeps automated version PRs within the current React Native series:
+
+```yaml
+# Under the relevant npm entry in updates:
+ignore:
+  - dependency-name: react-native
+    update-types:
+      - version-update:semver-minor
+      - version-update:semver-major
+```
+
+This is a version-update policy, not an auto-merge rule. See
+[Dependabot's ignore options](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#ignore).
+Review series upgrades separately when the supported host and its React/SDK requirements permit them.
+
+For a candidate update, run ordinary `npm ci`, `npm run typecheck`, the plugin tests, and `ppd check` against
+the supported Paseo host. Then install into an isolated daemon and exercise the actual UI. Check a native
+client for changes to native components or behavior. `ppd check` includes compilation and load checks; it
+does not run TypeScript or prove every render path works. When targeting an older host, set `HERMESC` and
+`HERMES` to that host's engine: discovery otherwise prefers binaries shipped with the plugin's local React
+Native dependency.
+
+### Observed upgrade experiment
+
+On 2026-10-22, an isolated copy of Paseo Plans (`8bbe518`) was tested against the pinned Paseo 0.12.0
+host (`cafe4b0`), which uses React 19.1.0 and React Native 0.81.5:
+
+| Experiment | Result |
+| --- | --- |
+| Minimal dependency example: RN 0.87.1 with React 19.2.3 | Ordinary lockfile resolution passed |
+| The same example with only RN changed to 0.88.0 | Resolution failed: RN requires React `^19.3.0` |
+| Plans with RN 0.88.0 and its original React 19.1.0 | Ordinary installation failed with `ERESOLVE` |
+| Diagnostic copy with peers bypassed and required test-tooling peers restored | Typecheck failed on changed RN `View` and `ScrollView` ref types, including `focus` and `scrollTo`; 255 tests passed, one approximation test skipped |
+| Same diagnostic copy, pinned host compiler and target-host Hermes | 13 checks passed; client and server bundle hashes were unchanged by the RN development dependency bump |
+
+The bypass was an experiment, not an accepted dependency configuration. An initial bypass also removed
+automatically installed SDK and Vitest peers; those missing tooling dependencies were restored before
+attributing the remaining type errors to React Native. The test shows why passing unit tests and host
+compilation cannot replace ordinary dependency resolution and TypeScript. It does not establish RN 0.88
+runtime compatibility: the host renderer remained RN 0.81.5, no native host upgrade was attempted, and
+no user daemon or production dependency tree was changed. This experiment does not cover other plugins
+already adapted to RN 0.87.1 or newer host versions, and is not a universal RN compatibility range.
+
 <h2 id="relies-on">What ppd relies on</h2>
 
 | Relies on | Used by | When it changes |

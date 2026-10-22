@@ -5,6 +5,7 @@ What Paseo 0.11 and 0.12 actually give a plugin at runtime. `ppd check` tests th
 | Area | Contract | What to do |
 | --- | --- | --- |
 | Client modules (checked) | Only `react`, `react/jsx-runtime`, `react-native`, `@tanstack/react-query`, `zod`, `@getpaseo/plugin`, `@getpaseo/plugin/client`, `/client/ui`, `/client/react-native`. Any other runtime require throws `Module "<name>" is not available in plugin client code`. Other npm packages are fine only if esbuild bundles them fully. | Keep host modules in `devDependencies`. |
+| Host module versions | The app supplies React and its paired React Native renderer. Local development versions provide types; an SDK peer range is not a runtime compatibility guarantee. React Native minor-series updates can break APIs. | Match the oldest supported host, review React/RN/SDK updates together, and run ordinary dependency resolution and typecheck before host checks. Do not auto-merge a new RN series or bypass peers to call it compatible. |
 | Gestures (checked) | No `react-native-gesture-handler` or `react-native-reanimated`. | Build pinch and double tap from `onResponder*` / `PanResponder` and `Animated`. |
 | Safe area (checked) | Plugin panels get no safe-area insets (getpaseo/paseo#5866, PR #5867). The Android nav bar can cover the last rows. | Pad the bottom yourself; runtime-detect a host `useSafeAreaInsets` export if one appears. |
 | Horizontal scroll | A plugin horizontal `ScrollView` is not registered with the host, so a fast right swipe on a zoomed page opens the mobile sidebar. | Known limit; keep horizontal panning short or behind a mode. |
@@ -21,3 +22,7 @@ What Paseo 0.11 and 0.12 actually give a plugin at runtime. `ppd check` tests th
 | MIME and previews | The daemon labels many binaries `application/octet-stream`; the Files tree has no previewer hook for plugins (getpaseo/paseo#3109, #5930). | Detect formats by magic bytes; provide your own entry points (panel, Command Center item, slash command). |
 | Media | No native video primitive (#4562). Host `playAudio` exists from 0.11.2. | Plan media features around what the host exposes. |
 | Theme and layout | Color every `Text` from `theme.colors`; size layout from `layout.compact`. No HTML elements, no `className`. | Test both `ppd web` viewports. |
+
+`ppd check` does not run TypeScript. Its successful compiler and Hermes checks do not prove that newer local
+types describe the supported host. Hermes discovery prefers the plugin's local React Native package before
+`PASEO_SOURCE`; use explicit `HERMESC` and `HERMES` from the target host when checking an older native runtime.
