@@ -38,7 +38,7 @@ Windows is not supported.
 | `@getpaseo/client` and `ws` inside `app.asar` | `agentTimeline` | the call fails naming the modules it looked for. |
 | `paseo daemon run --home`, `PASEO_HOME`, `PASEO_LISTEN` and the `config.json` keys | `ppd daemon up` | a start failure prints the daemon output and how it was started. |
 | Accessible names in the web UI ("New workspace", "Open menu", "Workspace actions", "Search commands") | `ppd web`, `PaseoWeb` | a timeout names the label it waited for. |
-| Rules vendored from Paseo (client registration, manifest schema, build options) | every `ppd check` (`manifest`, `client-eval`), the client check in `ppd install` and `ppd dev`, and the approximation's compile | drift shows up in the weekly CI job against Paseo main. |
+| Rules vendored from Paseo (client registration for 0.12 and 0.13 or later, the release that added each newer client method, manifest schema, build options) | every `ppd check` (`manifest`, `client-eval`), the client check in `ppd install` and `ppd dev`, and the approximation's compile | drift shows up in the weekly CI job against Paseo main. |
 
 `ppd daemon up` prints a note when the installed Paseo is not {meta.verifiedPaseo}, and `ppd doctor` shows the same text
 as a warning on its `paseo CLI` line:
