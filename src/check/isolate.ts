@@ -16,6 +16,7 @@ export interface EvalRequest {
   pluginDir: string;
   resultFile: string;
   icons: string[] | null;
+  paseoVersion?: string;
 }
 
 interface CleanupReport {
@@ -107,7 +108,7 @@ export async function evaluateIsolated(
   target: "server" | "client",
   bundle: string,
   pluginDir: string,
-  options: { timeoutMs?: number; icons?: ReadonlySet<string> | null } = {},
+  options: { timeoutMs?: number; icons?: ReadonlySet<string> | null; paseoVersion?: string } = {},
 ): Promise<EvalOutcome> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS;
   const work = mkdtempSync(join(tmpdir(), "ppd-eval-"));
@@ -118,6 +119,7 @@ export async function evaluateIsolated(
       pluginDir,
       resultFile: join(work, "result.json"),
       icons: options.icons ? [...options.icons] : null,
+      paseoVersion: options.paseoVersion,
     };
     writeFileSync(request.bundleFile, bundle);
     writeFileSync(join(work, "request.json"), JSON.stringify(request));

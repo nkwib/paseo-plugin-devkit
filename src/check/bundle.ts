@@ -10,7 +10,7 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { ClientRules } from "./client-rules.ts";
+import { CLIENT_CONTEXT_METHODS, ClientRules } from "./client-rules.ts";
 import { CLIENT_HOST_MODULES, isHostClientModule, isHostServerModule, isNodeBuiltin, SDK_CLIENT_ONLY } from "./host.ts";
 
 /** Runtime `require("x")` calls left in a compiled bundle, i.e. modules the host must supply. */
@@ -37,6 +37,13 @@ export function chainStub(): unknown {
   return makeStub(true);
 }
 
+const stubs = new WeakSet<object>();
+
+/** Whether `value` came from a stub host module, like the translation messages an SDK stub returns. */
+export function isStub(value: unknown): boolean {
+  return typeof value === "function" && stubs.has(value);
+}
+
 function makeStub(thenable: boolean): unknown {
   const target = function () {};
   let settled: unknown;
@@ -60,6 +67,7 @@ function makeStub(thenable: boolean): unknown {
     apply: () => makeStub(true),
     construct: () => makeStub(true) as object,
   });
+  stubs.add(proxy as object);
   return proxy;
 }
 
@@ -167,6 +175,8 @@ export interface ClientEvaluation {
 }
 
 export interface ClientEvaluationOptions {
+  /** The app version whose client contract applies (default: the verified release). */
+  paseoVersion?: string;
   /** Time to let async work in the contribution fail (default 50 ms). */
   settleMs?: number;
   /** The app's Lucide names. When given, unknown contribution icons are contract errors, like in the app. */
@@ -199,13 +209,13 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, op
     return (real.has(name) ? tryRequire(req, name) : undefined) ?? chainStub();
   };
   const setup = evaluateFactory<(client: unknown) => unknown>(bundle, requireModule);
-  const rules = new ClientRules(options.icons ?? null);
+  const rules = new ClientRules(options.icons ?? null, options.paseoVersion, isStub);
   const contributions: ClientContribution[] = [];
   const client = new Proxy(
     {},
     {
       get: (_, key) => {
-        if (typeof key !== "string") return undefined;
+        if (typeof key !== "string" || !rules.has(key)) return undefined;
         if (/^add[A-Z]/.test(key)) {
           return (...args: unknown[]) => {
             rules.register(key, args);
@@ -215,6 +225,8 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, op
         }
         return chainStub();
       },
+      // `"addFilePanel" in client` is a guard too: true only for methods the app at this version defines.
+      has: (_, key) => typeof key === "string" && (!/^add[A-Z]/.test(key) || (CLIENT_CONTEXT_METHODS.has(key) && rules.has(key))),
     },
   );
   let setupError: string | null = null;
@@ -227,7 +239,7 @@ export async function evaluateClientBundle(bundle: string, pluginDir: string, op
     rules.finish(returned);
     await new Promise((resolve) => setTimeout(resolve, options.settleMs ?? 50));
   } catch (error) {
-    setupError = (error as Error).message;
+    if (!rules.threw(error)) setupError = (error as Error).message;
   } finally {
     process.off("unhandledRejection", onRejection);
   }

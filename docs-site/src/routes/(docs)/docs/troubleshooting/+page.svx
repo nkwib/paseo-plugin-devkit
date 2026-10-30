@@ -32,7 +32,11 @@ prints the same lines and keeps watching. Each line under `client:` is a registr
 
 - `Unknown Lucide icon: X`: the app's Lucide build has no icon named X.
 - `Command Center item X has no icon`, `Workspace panel X has invalid context`, `Screen X is not a component`.
+- `File panel X has invalid selector`: `files` takes only `extensions` (without the dot) and `filenames`, plain
+  names with no `/`, `\`, `*` or `?`, at least one in all.
 - `client.X is not part of the app's plugin client context (calling it throws)`.
+- `Paseo 0.12.0 has no client.addFilePanel (added in 0.13.0), and the contribution threw: ...`: see
+  [below](#older-paseo).
 - `Plugin contribution must return a cleanup function`.
 
 Fix the line, save, and `ppd dev` re-checks on reload. `ppd check` reports the same rules as `client-eval`.
@@ -88,6 +92,20 @@ Plugin code runs in a child process with a time limit: 30 s for the client, and 
 approximation; with the app or a checkout the server is evaluated inside the compile step, which has 120 s. A
 blocking loop at module load or in `contribute` ends here. `plugin code called process.exit(N)` means what it says: the host would
 lose the whole plugin process. A timer or server left running after the cleanup is a warning, not a failure.
+
+<h3 id="older-paseo">Paseo 0.12.0 would reject this client</h3>
+
+```text
+WARN  client-eval      Paseo 0.12.0, which requirements.paseo ">=0.12.0" admits, would reject this client and show none of its UI. Raise requirements.paseo or use only what that release accepts
+      Paseo 0.12.0 has no client.addFilePanel (added in 0.13.0), and the contribution threw: client.addFilePanel is not a function. Guard the call with typeof, or require a newer Paseo
+      contributions: addFilePanel (Paseo 0.14.0 rules)
+```
+
+Paseo 0.13.0 added file panels and agent panels (betas: file panels in beta.1, agent and context-free panels in beta.2), made `context` optional on workspace panels, and accepts translated
+labels and `{ svg }` or component icons. An older app the range admits throws on these and drops the whole client;
+apps below `requirements.paseo` skip the plugin. Declare `"paseo": ">=0.13.0"`, or guard each newer call with
+`typeof client.addFilePanel === "function"`. Without a host, `ppd check` applies the oldest admitted release's rules
+directly, so the same problem is a `FAIL`. `ppd install` and `ppd dev` print the warning as a `note:` line.
 
 <h2 id="daemon">Dev daemon</h2>
 

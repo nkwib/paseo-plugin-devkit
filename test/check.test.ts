@@ -83,7 +83,8 @@ describe("runChecks", () => {
     expect(good.find((r) => r.id === "lucide-icons")).toMatchObject({ status: "pass", message: expect.stringMatching(/\d{4} Lucide icons of the Paseo/) });
     const bad = await runChecks(BAD, { paseoSource: null });
     expect(bad.find((r) => r.id === "lucide-icons")).toMatchObject({ status: "fail", message: expect.stringContaining("NotARealIconName") });
-    expect(bad.find((r) => r.id === "client-eval")?.details).toContain("Unknown Lucide icon: NotARealIconName");
+    // The message is the installed app's: "Unknown Lucide icon: X" before 0.13, "... has an invalid icon: unknown Lucide icon "X"" from 0.13.
+    expect(bad.find((r) => r.id === "client-eval")?.details?.some((detail) => /unknown Lucide icon:? "?NotARealIconName/i.test(detail))).toBe(true);
   }, 120_000);
 
   it("fails the bad fixture on boundaries, server evaluation and class syntax", async () => {

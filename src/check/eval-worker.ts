@@ -44,7 +44,7 @@ try {
       ...(await runCleanup(evaluation.cleanup, baseline)),
     };
   } else {
-    const evaluation = await evaluateClientBundle(bundle, request.pluginDir, { icons: request.icons ? new Set(request.icons) : null });
+    const evaluation = await evaluateClientBundle(bundle, request.pluginDir, { icons: request.icons ? new Set(request.icons) : null, paseoVersion: request.paseoVersion });
     result = {
       target: "client",
       contributions: evaluation.contributions.map((entry) => entry.method),
