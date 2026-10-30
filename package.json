@@ -1,6 +1,6 @@
 {
   "name": "paseo-plugin-devkit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Unofficial dev kit for Paseo plugin authors: isolated dev daemon, host-contract checks, a scripted fake agent, web UI screenshots, registry and release helpers, plus a Claude Code skill.",
   "keywords": [
     "paseo",

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-30)
 
 - Verified on Paseo 0.12.0: `ppd daemon up` and `ppd doctor` no longer print the version note on it.
 - `ppd check` applies the client registration rules of the Paseo version it checks against: the app's or source checkout's version, or without a host the oldest release `requirements.paseo` admits. From 0.13.0 that includes file panels (`client.addFilePanel`, getpaseo/paseo#7411), agent panels (`client.addAgentPanel`), workspace panels without `context`, translated labels, `{ svg }` and component icons, and the `notification` timeline item. Before, every plugin that used them failed `client-eval`.
@@ -9,6 +9,7 @@
 - A source checkout's version is raised to the release of the newer client methods its evaluator defines, since its package version lags main until a release is cut.
 - When `requirements.paseo` excludes the installed app (a prerelease counts by its stable core, like in Paseo), `client-eval` checks against the range's lower bound and warns that the app would not load the plugin.
 - From 0.13.0 a label is a non-empty string or a message from the SDK's `message()`; anything else gets the SDK's error text. `"addFilePanel" in client` works as a guard.
+- Docs: React Native, React and SDK versions come from the Paseo app at runtime; how to review their upgrades and keep Dependabot within a React Native series.
 
 ## 0.1.0 (2026-10-18)
 
