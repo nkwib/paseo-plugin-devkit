@@ -2,13 +2,18 @@
 import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import minVersion from "semver/ranges/min-version.js";
+import validRange from "semver/ranges/valid.js";
+import coerce from "semver/functions/coerce.js";
+import satisfies from "semver/functions/satisfies.js";
 import { bundleRequires, disallowedClientRequires, disallowedServerRequires, formatKb, sizeReport } from "./bundle.ts";
-import { compileApprox, CompileError, compileLikePaseo, compileWithHost, describeHost, findEntries, findPaseoApp, findPaseoHost, findPaseoSource, PASEO_COMPILER, PASEO_SOURCE_MISSING } from "./compile.ts";
+import { compileApprox, CompileError, compileLikePaseo, compileWithHost, describeHost, findEntries, findPaseoApp, findPaseoHost, findPaseoSource, paseoHostVersion, PASEO_COMPILER, type PaseoHost, PASEO_SOURCE_MISSING } from "./compile.ts";
+import { hasContract013 } from "./client-rules.ts";
+import { VERIFIED_PASEO } from "../compat.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
 import { cleanupWarning, DEFAULT_EVAL_TIMEOUT_MS, evaluateIsolated } from "./isolate.ts";
 import { hostIconNames, iconListProblem, staticIconNames } from "./lucide.ts";
-import { VERIFIED_PASEO } from "../compat.ts";
 import { manifestFindings } from "./manifest.ts";
 import { UsageError } from "../usage.ts";
 
@@ -43,6 +48,51 @@ interface Manifest {
   build?: unknown;
   icon?: unknown;
   [key: string]: unknown;
+}
+
+interface ClientContract {
+  /** The app version whose registration rules the client is checked against. */
+  version: string;
+  /** The oldest app requirements.paseo admits, when its contract differs from `version`'s. */
+  oldest: { version: string; range: string } | null;
+  /** The host's version when requirements.paseo excludes it: that app would not load the plugin at all. */
+  excludedHost: string | null;
+}
+
+/**
+ * The host's version; without a host, the oldest app requirements.paseo admits; else the verified release. Apps below
+ * the range skip the plugin, so only the range's lower bound can reach older rules than the host's.
+ */
+function clientContract(host: PaseoHost | null, dir: string): ClientContract {
+  let range: unknown;
+  try {
+    range = JSON.parse(readFileSync(resolve(dir, "paseo-plugin.json"), "utf8"))?.requirements?.paseo;
+  } catch {}
+  const lowest = typeof range === "string" && validRange(range) !== null ? minVersion(range)?.version : undefined;
+  const hostVersion = paseoHostVersion(host);
+  // An app the range excludes skips the plugin, so its rules do not apply; the range's own lower bound does.
+  // Like Paseo's assertPluginCompatibility: a prerelease is admitted when it or its stable core satisfies the range.
+  const admitted = (version: string) => satisfies(version, range as string, { loose: true }) || satisfies(coerce(version)?.version ?? version, range as string);
+  const excluded = hostVersion !== undefined && lowest !== undefined && !admitted(hostVersion);
+  const version = (excluded ? lowest : hostVersion) ?? lowest ?? VERIFIED_PASEO;
+  const older = lowest !== undefined && hasContract013(version) && !hasContract013(lowest);
+  return { version, oldest: older ? { version: lowest, range: range as string } : null, excludedHost: excluded ? hostVersion : null };
+}
+
+function excludedHostNote(contract: ClientContract): string {
+  return `the installed Paseo ${contract.excludedHost} is outside requirements.paseo, so it would not load this plugin; checked with Paseo ${contract.version} rules instead`;
+}
+
+/** Registration errors the oldest admitted app would raise that the checked host does not, or null. */
+async function olderAppRejection(bundle: string, dir: string, contract: ClientContract, icons: ReadonlySet<string> | null, timeoutMs: number): Promise<{ message: string; errors: string[] } | null> {
+  if (!contract.oldest) return null;
+  const outcome = await evaluateIsolated("client", bundle, dir, { timeoutMs, icons, paseoVersion: contract.oldest.version });
+  const result = outcome.ok && !("error" in outcome.result) && outcome.result.target === "client" ? outcome.result : null;
+  if (!result?.contractErrors.length) return null;
+  return {
+    message: `Paseo ${contract.oldest.version}, which requirements.paseo "${contract.oldest.range}" admits, would reject this client and show none of its UI. Raise requirements.paseo or use only what that release accepts`,
+    errors: result.contractErrors,
+  };
 }
 
 export async function runChecks(pluginDir: string, options: CheckOptions = {}): Promise<CheckResult[]> {
@@ -146,10 +196,12 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
   }
 
   const lucide = hostIconNames(host, dir);
+  const contract = clientContract(host, dir);
   const evalTimeoutMs = options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS;
-  const [serverOutcome, clientOutcome] = await Promise.all([
+  const [serverOutcome, clientOutcome, older] = await Promise.all([
     serverBundle && !realEvalError && !realHandlers ? evaluateIsolated("server", serverBundle, dir, { timeoutMs: evalTimeoutMs }) : null,
-    clientBundle ? evaluateIsolated("client", clientBundle, dir, { timeoutMs: evalTimeoutMs, icons: lucide?.names ?? null }) : null,
+    clientBundle ? evaluateIsolated("client", clientBundle, dir, { timeoutMs: evalTimeoutMs, icons: lucide?.names ?? null, paseoVersion: contract.version }) : null,
+    clientBundle ? olderAppRejection(clientBundle, dir, contract, lucide?.names ?? null, evalTimeoutMs) : null,
   ]);
   if (serverBundle) {
     if (realEvalError) {
@@ -185,8 +237,15 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       if ("error" in result) add("client-eval", "fail", `client bundle failed to evaluate: ${result.error}`);
       else if (result.target === "client") {
         result.icons.forEach((icon) => contributionIcons.add(icon));
-        const summary = `contributions: ${result.contributions.join(", ") || "none"}`;
-        if (result.contractErrors.length) add("client-eval", "fail", "the app would reject this plugin client and show none of its UI", [...result.contractErrors, summary]);
+        const summary = `contributions: ${result.contributions.join(", ") || "none"} (Paseo ${contract.version} rules)`;
+        const notes = [
+          ...(contract.excludedHost ? [excludedHostNote(contract)] : []),
+          ...(result.setupError ? [`contribution threw under stub host modules (may be a stub limit): ${result.setupError}`] : []),
+          ...(cleanupWarning(result) ? [cleanupWarning(result)!] : []),
+        ];
+        if (result.contractErrors.length) add("client-eval", "fail", "the app would reject this plugin client and show none of its UI", [...result.contractErrors, ...notes, summary]);
+        else if (older) add("client-eval", "warn", older.message, [...older.errors, ...notes, summary]);
+        else if (contract.excludedHost) add("client-eval", "warn", excludedHostNote(contract), [...notes.slice(1), summary]);
         else if (result.setupError) add("client-eval", "warn", `contribution threw under stub host modules (may be a stub limit): ${result.setupError}`, [summary]);
         else if (cleanupWarning(result)) add("client-eval", "warn", cleanupWarning(result)!, [summary]);
         else add("client-eval", "pass", summary);
@@ -329,13 +388,20 @@ export async function checkClient(pluginDir: string, options: CheckOptions = {})
   } catch (error) {
     return { errors: [`client compile failed: ${(error as Error).message}`], notes: [], iconSource: null };
   }
-  const outcome = await evaluateIsolated("client", bundle, dir, { timeoutMs: options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS, icons: lucide?.names ?? null });
+  const timeoutMs = options.evalTimeoutMs ?? DEFAULT_EVAL_TIMEOUT_MS;
+  const contract = clientContract(host, dir);
+  const [outcome, older] = await Promise.all([
+    evaluateIsolated("client", bundle, dir, { timeoutMs, icons: lucide?.names ?? null, paseoVersion: contract.version }),
+    olderAppRejection(bundle, dir, contract, lucide?.names ?? null, timeoutMs),
+  ]);
   const iconSource = lucide?.source ?? null;
   if (!outcome.ok) return { errors: [outcome.error], notes: [], iconSource };
   const result = outcome.result;
   if ("error" in result) return { errors: [result.error], notes: [], iconSource };
   if (result.target !== "client") return null;
   const notes = [
+    ...(contract.excludedHost ? [excludedHostNote(contract)] : []),
+    ...(older && !result.contractErrors.length ? [`${older.message}: ${older.errors.join("; ")}`] : []),
     ...(result.setupError ? [`contribution threw under stub host modules (may be a stub limit): ${result.setupError}`] : []),
     ...(cleanupWarning(result) ? [cleanupWarning(result)!] : []),
     ...(iconProblem ? [iconProblem] : iconSource ? [] : ["icon names not checked: no Lucide list found"]),

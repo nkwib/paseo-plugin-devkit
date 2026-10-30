@@ -20,6 +20,8 @@ under dist/ (for example dist/check/client-rules.js), and the notices are kept.
 
   src/check/client-rules.ts
       packages/app/src/plugins/evaluate.ts
+      packages/app/src/plugins/icons.ts
+      packages/plugin/src/icons.ts
   src/check/manifest.ts
       packages/server/src/server/plugins/manifest.ts
       packages/protocol/src/plugin-config.ts

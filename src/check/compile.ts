@@ -16,6 +16,7 @@ import { build } from "esbuild";
 import { CLIENT_HOST_MODULES, SDK_SPECIFIERS, SERVER_HOST_MODULES } from "./host.ts";
 import { describeNoResult, runChild } from "./isolate.ts";
 import { layoutMismatch } from "../compat.ts";
+import { atLeast, CLIENT_METHOD_SINCE } from "./client-rules.ts";
 import { which } from "../proc.ts";
 
 export type Target = "client" | "server";
@@ -95,6 +96,28 @@ export function findPaseoApp(explicit?: string, env: NodeJS.ProcessEnv = process
 
 /** Where the real compiler comes from. Null means the esbuild approximation. */
 export type PaseoHost = { kind: "source"; root: string } | ({ kind: "app" } & PaseoApp);
+
+/**
+ * The app version whose client contract the host has. A source checkout's package version lags main until the next
+ * release is cut, so it is raised to the release of any newer client method its evaluator already defines.
+ */
+export function paseoHostVersion(host: PaseoHost | null): string | undefined {
+  if (!host) return undefined;
+  if (host.kind === "app") return host.version ?? undefined;
+  let version: string | undefined;
+  try {
+    const declared = JSON.parse(readFileSync(join(host.root, "packages/app/package.json"), "utf8")).version;
+    if (typeof declared === "string") version = declared;
+  } catch {}
+  let evaluator = "";
+  try {
+    evaluator = readFileSync(join(host.root, "packages/app/src/plugins/evaluate.ts"), "utf8");
+  } catch {}
+  for (const [method, since] of CLIENT_METHOD_SINCE) {
+    if (evaluator.includes(`${method}(`) && (!version || !atLeast(version, since))) version = since;
+  }
+  return version;
+}
 
 export interface HostSelection {
   /** A checkout path, null to skip, undefined for PASEO_SOURCE. */
