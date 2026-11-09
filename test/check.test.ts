@@ -53,7 +53,7 @@ describe("compiled fixtures", () => {
       "Plugin contribution must return a cleanup function",
     ]);
     const icon = await evaluateClientBundle(bundle.replace("Bad_Id", "panel"), GOOD, { icons: new Set(["Hand"]) });
-    expect(icon.contractErrors).toContain("Unknown Lucide icon: HandWave");
+    expect(icon.contractErrors).toContain('Workspace panel panel has an invalid icon: unknown Lucide icon "HandWave"');
   });
 
   it("throws the app's error for a module the host does not provide", async () => {
