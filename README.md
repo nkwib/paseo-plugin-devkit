@@ -186,7 +186,7 @@ try {
 
 Paths are workspace-relative, use `/`, and must not contain `.` or `..` segments. Tab helpers use the full relative path, even when the visible tab shows only its basename. `openFile` focuses an existing tab, otherwise opens through Files. Pass `panel` when a picker is expected; the helper waits for it even when the tab appears first. Panel names accept a unique title or the full host label; an ambiguous title fails instead of choosing a plugin. Omit `panel` when reopening with a saved association; use `openWith` to change it. These helpers target desktop file tabs; compact file sheets can be exercised through `ui.page`.
 
-The CLI accepts the same opening step: `ppd web --workspace <id> --open-file report.pdf --shot report.png`. Add `--with Viewer` for files with a panel picker. `PPD_E2E=1 npx vitest run test/file-panels-e2e.test.ts` exercises a nested CSV, remembered panel choice, rewrite, deletion, restoration, app reload and tab closure on a fresh isolated daemon; it removes the daemon and temporary workspace on failure too.
+The CLI accepts the same opening step: `ppd web --workspace <id> --open-file report.pdf --shot report.png`. Add `--with Viewer` for files with a panel picker. `PPD_E2E=1 npx vitest run test/file-panels-e2e.test.ts` exercises duplicate folder and file names, a nested CSV, remembered panel choice, rewrite, deletion, restoration, app reload and tab closure on a fresh isolated daemon; it removes the daemon and temporary workspace on failure too.
 
 ## Fake agent
 

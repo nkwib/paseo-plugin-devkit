@@ -163,6 +163,30 @@ export class PaseoWeb {
     return this.page.getByRole("button", { name: path, exact: true });
   }
 
+  private async fileRow(path: string): Promise<Locator> {
+    // Paseo's tree is a flat list: indentation supplies ancestry, and row ids supply identity.
+    // Matching names across the page can open a different file with the same basename.
+    const found = await this.page.waitForFunction((wanted) => {
+      const parents: { indent: number; name: string }[] = [];
+      const rows = document.querySelector('[data-testid="files-empty-area"]')?.querySelectorAll<HTMLElement>('[data-testid^="file-explorer-row-"]') ?? [];
+      for (const row of rows) {
+        if (!/^file-explorer-row-\d+$/.test(row.dataset.testid ?? "")) continue;
+        const name = row.querySelector('[data-testid$="-name"]')?.textContent;
+        if (!name) continue;
+        const indent = Number.parseFloat(getComputedStyle(row).paddingLeft);
+        while (parents.length && parents.at(-1)!.indent >= indent) parents.pop();
+        if ([...parents.map((parent) => parent.name), name].join("/") === wanted) return row.dataset.testid;
+        parents.push({ indent, name });
+      }
+      return null;
+    }, path, { timeout: 30_000 });
+    try {
+      return this.page.getByTestId((await found.jsonValue()) as string);
+    } finally {
+      await found.dispose();
+    }
+  }
+
   /** Open a workspace-relative path through the real Files tree, never through plugin navigation. */
   async openFile(path: string, options: FileOpenOptions = {}): Promise<Locator> {
     const parts = path.split("/");
@@ -175,12 +199,14 @@ export class PaseoWeb {
     }
     await this.openFiles();
     for (let index = 0; index < parts.length - 1; index++) {
-      if (!(await this.page.getByText(parts[index + 1]!, { exact: true }).last().isVisible())) {
-        await this.page.getByText(parts[index]!, { exact: true }).last().click();
-      }
+      const folder = await this.fileRow(parts.slice(0, index + 1).join("/"));
+      await folder.click({ button: "right" });
+      await this.page.getByRole("menuitem", { name: "Copy relative path", exact: true }).waitFor({ state: "visible" });
+      const expanded = await this.page.getByRole("menuitem", { name: "Collapse folder", exact: true }).isVisible();
+      await this.page.keyboard.press("Escape");
+      if (!expanded) await folder.click();
     }
-    const name = parts.at(-1)!;
-    await this.page.getByText(name, { exact: true }).last().dblclick();
+    await (await this.fileRow(path)).dblclick();
     // The tab can mount before the file metadata and picker arrive. Wait for the actual radio,
     // rather than treating an early tab as evidence that a saved association bypassed the picker.
     if (options.panel) await this.chooseFilePanel(options.panel, options.remember);

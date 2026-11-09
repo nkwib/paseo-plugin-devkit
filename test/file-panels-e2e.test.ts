@@ -22,7 +22,10 @@ describe.skipIf(!enabled)("native file-tab helpers (PPD_E2E=1)", () => {
     process.env.XDG_STATE_HOME = scratch("ppd-file-panels-xdg-");
     workspace = scratch("ppd-file-panels-workspace-");
     mkdirSync(join(workspace, "reports"));
+    mkdirSync(join(workspace, "archive/reports"), { recursive: true });
+    writeFileSync(join(workspace, "archive/reports/live.csv"), "Nested decoy,0\n");
     writeFileSync(join(workspace, "reports/live.csv"), "Before rewrite,1\n");
+    writeFileSync(join(workspace, "live.csv"), "Root decoy,0\n");
     const daemon = await daemonUp({ name, workspace, log: () => {} });
     const cli = (args: string[]) => {
       const result = runPaseo(daemon.paseoBin, daemon.home, [...args, "--json"]);
@@ -54,6 +57,12 @@ describe.skipIf(!enabled)("native file-tab helpers (PPD_E2E=1)", () => {
       console.error(await web.page.locator("body").ariaSnapshot());
       console.error("Plugin errors:", web.pluginErrors, "Console errors:", web.errors);
     }
+  });
+
+  it("distinguishes duplicate folder and file names in an already expanded tree", async () => {
+    await web!.openFile("archive/reports/live.csv", { panel: "Fixture" });
+    await expect.poll(() => web!.page.getByText("Nested decoy,0", { exact: true }).isVisible()).toBe(true);
+    await web!.closeFile("archive/reports/live.csv");
   });
 
   it("opens a nested file, selects a panel, watches changes, restores a pinned tab, switches panels and closes it", async () => {
