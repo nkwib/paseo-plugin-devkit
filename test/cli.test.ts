@@ -52,5 +52,7 @@ describe("ppd CLI guards", () => {
     expect(unknown.status).toBe(1);
     expect(unknown.stderr).toMatch(/Unknown option '--frob'[\s\S]*run `ppd check --help`/);
     expect(ppd("check", "--max-client-kb", "lots").stderr).toMatch(/--max-client-kb must be a whole number of KiB/);
+    expect(ppd("web", "--open-file", "a.csv", "--with", "Viewer", "--picker-timeout", "soon").stderr).toMatch(/--picker-timeout must be milliseconds, got soon/);
+    expect(ppd("web", "--open-file", "a.csv", "--picker-timeout", "5000").stderr).toMatch(/--picker-timeout requires --with/);
   });
 });

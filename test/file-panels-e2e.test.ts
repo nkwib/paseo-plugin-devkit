@@ -29,6 +29,8 @@ describe.skipIf(!enabled)("native file-tab helpers (PPD_E2E=1)", () => {
     // More files than the virtualized Files tree renders at once.
     for (let index = 0; index < 400; index++) writeFileSync(join(workspace, `filler-${String(index).padStart(3, "0")}.txt`), "");
     writeFileSync(join(workspace, "zz-last.csv"), "Last row,4\n");
+    // Its own extension, so the csv association remembered below does not skip its picker.
+    writeFileSync(join(workspace, "twin.tsv"), "Twin\t5\n");
     const daemon = await daemonUp({ name, workspace, log: () => {} });
     const cli = (args: string[]) => {
       const result = runPaseo(daemon.paseoBin, daemon.home, [...args, "--json"]);
@@ -109,4 +111,21 @@ describe.skipIf(!enabled)("native file-tab helpers (PPD_E2E=1)", () => {
     expect(ui.pluginErrors).toEqual([]);
     expect(ui.errors).toEqual([]);
   }, 120_000);
+
+  it("refuses a panel title two plugins share and accepts the full label", async () => {
+    const ui = web!;
+    expect((await installPlugin(join(FIXTURES, "file-panel-twin"), { name, log: () => {} })).status).toBe("running");
+    await ui.reload();
+    await expect(ui.openFile("twin.tsv", { panel: "Fixture", pickerTimeoutMs: 20_000 }))
+      .rejects.toThrow('the panel picker offers 2 panels titled "Fixture": ');
+    await ui.chooseFilePanel("Fixture \u2014 file-panel-twin");
+    await expect.poll(() => ui.page.getByText("Twin panel", { exact: true }).isVisible()).toBe(true);
+    await expect(ui.openWith("twin.tsv", "Fixture")).rejects.toThrow('the "Open with" menu offers 2 panels titled "Fixture": ');
+    await ui.page.keyboard.press("Escape");
+    await ui.page.keyboard.press("Escape");
+    await ui.openWith("twin.tsv", "Fixture \u2014 file-panel-fixture");
+    await expect.poll(() => ui.page.getByText("Twin\t5", { exact: true }).isVisible()).toBe(true);
+    await ui.closeFile("twin.tsv");
+    expect(ui.pluginErrors).toEqual([]);
+  }, 180_000);
 });

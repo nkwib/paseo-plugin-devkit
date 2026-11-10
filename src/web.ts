@@ -51,6 +51,8 @@ export interface FileOpenOptions {
   panel?: string;
   /** Remember the panel choice when the host shows its picker. */
   remember?: boolean;
+  /** How long to wait for the panel picker when `panel` is set (default 10 000 ms). */
+  pickerTimeoutMs?: number;
 }
 
 const CHROME_PATHS: Record<string, string[]> = {
@@ -86,6 +88,19 @@ export function pluginEvaluationFailure(text: string): string | null {
 function panelName(panel: string): RegExp {
   const escaped = panel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(`^${escaped}(?: \\u2014 .+)?$`);
+}
+
+/** The one offered label that `panel` names, by unique title or full "Title \u2014 owner" label. */
+export function pickPanel(panel: string, offered: readonly string[], where = "the panel picker"): string {
+  const matches = offered.filter((label) => panelName(panel).test(label));
+  if (matches.length === 0) throw new Error(`${where} offers no panel named "${panel}"; it offers: ${offered.join(", ")}`);
+  if (new Set(matches).size === 1 && matches.length > 1) {
+    throw new Error(`${where} offers ${matches.length} panels labelled "${matches[0]}", which ppd cannot tell apart; give the panels distinct titles`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`${where} offers ${matches.length} panels titled "${panel}": ${matches.join(", ")}. Pass the full label, such as "${matches[0]}"`);
+  }
+  return matches[0]!;
 }
 
 export class PaseoWeb {
@@ -152,9 +167,10 @@ export class PaseoWeb {
   /** Open the host's Files tree in the current workspace. */
   async openFiles(): Promise<void> {
     const browse = this.page.getByRole("button", { name: "Browse workspace files", exact: true });
-    if (!(await browse.isVisible())) {
-      await this.page.getByRole("button", { name: "Open Explorer sidebar", exact: true }).click();
-    }
+    const sidebar = this.page.getByRole("button", { name: "Open Explorer sidebar", exact: true });
+    // After a reload the restored sidebar mounts after the app shell: wait for either control before choosing.
+    await waitForUi(browse.or(sidebar).first(), 'the Files button or an "Open Explorer sidebar" button', 30_000);
+    if (!(await browse.isVisible())) await sidebar.click();
     await browse.click();
   }
 
@@ -237,7 +253,7 @@ export class PaseoWeb {
     await (await this.fileRow(path)).dblclick();
     // The tab can mount before the file metadata and picker arrive. Wait for the actual radio,
     // rather than treating an early tab as evidence that a saved association bypassed the picker.
-    if (options.panel) await this.chooseFilePanel(options.panel, options.remember);
+    if (options.panel) await this.chooseFilePanel(options.panel, options.remember, options.pickerTimeoutMs);
     const tab = this.fileTab(path);
     await waitForUi(tab, `file tab ${path}`, 30_000);
     return tab;
@@ -258,12 +274,8 @@ export class PaseoWeb {
         { cause: error },
       );
     }
-    const radio = dialog.getByRole("radio", { name: panelName(panel) });
-    if ((await radio.count()) === 0) {
-      const offered = await dialog.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.getAttribute("aria-label") ?? radio.textContent?.trim() ?? ""));
-      throw new Error(`the panel picker offers no panel named "${panel}"; it offers: ${offered.join(", ")}`);
-    }
-    await radio.click();
+    const offered = await dialog.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.getAttribute("aria-label") ?? radio.textContent?.trim() ?? ""));
+    await dialog.getByRole("radio", { name: pickPanel(panel, offered), exact: true }).click();
     await dialog.getByRole("checkbox", { name: "Don't ask me again", exact: true }).setChecked(remember);
     await dialog.getByRole("button", { name: "Use", exact: true }).click();
   }
@@ -272,7 +284,11 @@ export class PaseoWeb {
   async openWith(name: string, panel: string): Promise<void> {
     await this.fileTab(name).click({ button: "right" });
     await this.page.getByRole("menuitem", { name: "Open with…", exact: true }).hover();
-    await this.page.getByRole("menuitem", { name: panelName(panel) }).click();
+    const panels = this.page.getByRole("menuitem", { name: / \u2014 / });
+    await waitForUi(panels.first(), 'the "Open with" panel list', 10_000);
+    // The tab menu's own items carry no " \u2014 owner" suffix; only the submenu's panels do.
+    const offered = await panels.evaluateAll((items) => items.map((item) => item.textContent?.trim() ?? ""));
+    await this.page.getByRole("menuitem", { name: pickPanel(panel, offered, 'the "Open with" menu'), exact: true }).click();
   }
 
   /** Keep a preview tab open when another file is opened. */
@@ -384,11 +400,15 @@ export async function webCommand(args: string[]): Promise<number> {
       "full-page": { type: "boolean" },
       "open-file": { type: "string" },
       with: { type: "string" },
+      "picker-timeout": { type: "string" },
     },
     strict: true,
   });
   if (values.wait !== undefined && !/^\d+$/.test(values.wait)) throw new UsageError(`--wait must be milliseconds, got ${values.wait}`);
   if (values.with && !values["open-file"]) throw new UsageError("--with requires --open-file");
+  const pickerTimeout = values["picker-timeout"];
+  if (pickerTimeout !== undefined && !/^\d+$/.test(pickerTimeout)) throw new UsageError(`--picker-timeout must be milliseconds, got ${pickerTimeout}`);
+  if (pickerTimeout !== undefined && !values.with) throw new UsageError("--picker-timeout requires --with");
   const daemon = requireDaemon(values.name);
   if (!daemon.webDist) throw new Error("this dev daemon has no web UI: restart it with `ppd daemon up --web-dist <dir>`");
   const viewport = values.viewport ? parseViewport(values.viewport) : undefined;
@@ -410,7 +430,7 @@ export async function webCommand(args: string[]): Promise<number> {
       }
     }
     if (values.command) await web.runCommand(values.command);
-    if (values["open-file"]) await web.openFile(values["open-file"], { panel: values.with });
+    if (values["open-file"]) await web.openFile(values["open-file"], { panel: values.with, pickerTimeoutMs: pickerTimeout === undefined ? undefined : Number(pickerTimeout) });
     for (const label of values.click ?? []) await web.click(label);
     await web.page.waitForTimeout(values.wait ? Number(values.wait) : 1500);
     if (values.shot) console.log(`screenshot: ${await web.shot(values.shot, values["full-page"])}`);

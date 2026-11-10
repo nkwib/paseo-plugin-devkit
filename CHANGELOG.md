@@ -8,6 +8,9 @@
 - Without a Paseo host and without `requirements.paseo`, `ppd check` now applies the Paseo 0.15.3 client contract instead of 0.12.0, including the 0.13.0 rules.
 - Verify the daemon, compiler and web UI on Paseo 0.15.3. Add an isolated nested-file regression covering panel selection, changes, deletion, restoration, reload and reopening.
 - Close the browser when initial app navigation fails.
+- A panel title that several plugins offer fails with the matching labels in `openFile`, `chooseFilePanel` and `openWith`; pass the full label (`"Title \u2014 owner"`) to choose one. Panels with identical full labels fail as indistinguishable. Before, Playwright's strict-mode error surfaced.
+- Add `FileOpenOptions.pickerTimeoutMs` and `ppd web --picker-timeout MS` to change the 10 s panel picker wait.
+- `openFile` waits for the Files controls after `reload` instead of failing when the restored sidebar mounts late.
 
 ## 0.2.0 (2026-10-30)
 
