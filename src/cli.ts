@@ -103,6 +103,7 @@ steps in order and prints console errors.
   --open-file PATH    open a workspace-relative file through Paseo's Files tree
   --with PANEL        answer the panel picker with a unique panel title or full label (requires --open-file);
                       fails when the file opens without a picker (saved association or single panel)
+  --picker-timeout MS how long --with waits for the panel picker (default 10000)
   --click LABEL       click an element by its accessible name (repeatable)
   --workspace ID      workspace id, name or path
   --path /route       open an app route instead of a workspace

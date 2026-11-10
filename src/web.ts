@@ -51,6 +51,8 @@ export interface FileOpenOptions {
   panel?: string;
   /** Remember the panel choice when the host shows its picker. */
   remember?: boolean;
+  /** How long to wait for the panel picker when `panel` is set (default 10 000 ms). */
+  pickerTimeoutMs?: number;
 }
 
 const CHROME_PATHS: Record<string, string[]> = {
@@ -238,7 +240,7 @@ export class PaseoWeb {
     await (await this.fileRow(path)).dblclick();
     // The tab can mount before the file metadata and picker arrive. Wait for the actual radio,
     // rather than treating an early tab as evidence that a saved association bypassed the picker.
-    if (options.panel) await this.chooseFilePanel(options.panel, options.remember);
+    if (options.panel) await this.chooseFilePanel(options.panel, options.remember, options.pickerTimeoutMs);
     const tab = this.fileTab(path);
     await waitForUi(tab, `file tab ${path}`, 30_000);
     return tab;
@@ -385,11 +387,15 @@ export async function webCommand(args: string[]): Promise<number> {
       "full-page": { type: "boolean" },
       "open-file": { type: "string" },
       with: { type: "string" },
+      "picker-timeout": { type: "string" },
     },
     strict: true,
   });
   if (values.wait !== undefined && !/^\d+$/.test(values.wait)) throw new UsageError(`--wait must be milliseconds, got ${values.wait}`);
   if (values.with && !values["open-file"]) throw new UsageError("--with requires --open-file");
+  const pickerTimeout = values["picker-timeout"];
+  if (pickerTimeout !== undefined && !/^\d+$/.test(pickerTimeout)) throw new UsageError(`--picker-timeout must be milliseconds, got ${pickerTimeout}`);
+  if (pickerTimeout !== undefined && !values.with) throw new UsageError("--picker-timeout requires --with");
   const daemon = requireDaemon(values.name);
   if (!daemon.webDist) throw new Error("this dev daemon has no web UI: restart it with `ppd daemon up --web-dist <dir>`");
   const viewport = values.viewport ? parseViewport(values.viewport) : undefined;
@@ -411,7 +417,7 @@ export async function webCommand(args: string[]): Promise<number> {
       }
     }
     if (values.command) await web.runCommand(values.command);
-    if (values["open-file"]) await web.openFile(values["open-file"], { panel: values.with });
+    if (values["open-file"]) await web.openFile(values["open-file"], { panel: values.with, pickerTimeoutMs: pickerTimeout === undefined ? undefined : Number(pickerTimeout) });
     for (const label of values.click ?? []) await web.click(label);
     await web.page.waitForTimeout(values.wait ? Number(values.wait) : 1500);
     if (values.shot) console.log(`screenshot: ${await web.shot(values.shot, values["full-page"])}`);
