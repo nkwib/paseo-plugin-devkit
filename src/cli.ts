@@ -101,7 +101,8 @@ steps in order and prints console errors.
   --viewport WxH      e.g. 390x844; widths under 768 get the compact (phone) layout with touch
   --command TEXT      select a Command Center item by its exact title
   --open-file PATH    open a workspace-relative file through Paseo's Files tree
-  --with PANEL        unique panel title or full label (requires --open-file)
+  --with PANEL        answer the panel picker with a unique panel title or full label (requires --open-file);
+                      fails when the file opens without a picker (saved association or single panel)
   --click LABEL       click an element by its accessible name (repeatable)
   --workspace ID      workspace id, name or path
   --path /route       open an app route instead of a workspace
