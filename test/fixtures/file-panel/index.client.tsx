@@ -7,6 +7,6 @@ function Reader({ file, theme }: PluginFilePanelProps) {
 }
 
 export default function contribute(client: PluginClientContext) {
-  const remove = client.addFilePanel({ id: "reader", title: "Fixture", icon: "FileText", files: { extensions: ["csv"] }, Component: Reader });
+  const remove = client.addFilePanel({ id: "reader", title: "Fixture", icon: "FileText", files: { extensions: ["csv", "tsv"] }, Component: Reader });
   return () => remove();
 }

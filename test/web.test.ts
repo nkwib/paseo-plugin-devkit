@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { noWorkspaceNote, pluginEvaluationFailure, isCompactViewport, parseViewport, pickWorkspace } from "../src/web.ts";
+import { noWorkspaceNote, pluginEvaluationFailure, isCompactViewport, parseViewport, pickPanel, pickWorkspace } from "../src/web.ts";
 
 describe("web helpers", () => {
   it("reads the app's plugin evaluation warning (packages/app/src/plugins/registry.ts)", () => {
@@ -28,5 +28,17 @@ describe("web helpers", () => {
     // `paseo run --cwd` makes a second workspace for a directory: say so instead of opening nothing silently.
     expect(noWorkspaceNote(entries)).toBe("2 workspaces on the dev daemon, none opened: pass --workspace <id, name or dir> (ids: wks_1, wks_2)");
     expect(noWorkspaceNote([])).toMatch(/^no workspace on the dev daemon/);
+  });
+
+  it("picks a panel by unique title or full label, and lists the options when a title is ambiguous", () => {
+    const offered = ["Source", "Viewer \u2014 doc-viewer", "Viewer \u2014 csv-viewer", "Chart \u2014 csv-viewer"];
+    expect(pickPanel("Source", offered)).toBe("Source");
+    expect(pickPanel("Chart", offered)).toBe("Chart \u2014 csv-viewer");
+    expect(pickPanel("Viewer \u2014 csv-viewer", offered)).toBe("Viewer \u2014 csv-viewer");
+    expect(() => pickPanel("Viewer", offered)).toThrow(
+      'the panel picker offers 2 panels titled "Viewer": Viewer \u2014 doc-viewer, Viewer \u2014 csv-viewer. Pass the full label, such as "Viewer \u2014 doc-viewer"',
+    );
+    expect(() => pickPanel("View", offered)).toThrow(/offers no panel named "View"; it offers: Source, Viewer/);
+    expect(() => pickPanel("Viewer \u2014 csv", offered)).toThrow(/no panel named/);
   });
 });

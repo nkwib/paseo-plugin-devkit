@@ -90,6 +90,16 @@ function panelName(panel: string): RegExp {
   return new RegExp(`^${escaped}(?: \\u2014 .+)?$`);
 }
 
+/** The one picker label that `panel` names, by unique title or full "Title \u2014 owner" label. */
+export function pickPanel(panel: string, offered: readonly string[]): string {
+  const matches = offered.filter((label) => panelName(panel).test(label));
+  if (matches.length === 0) throw new Error(`the panel picker offers no panel named "${panel}"; it offers: ${offered.join(", ")}`);
+  if (matches.length > 1) {
+    throw new Error(`the panel picker offers ${matches.length} panels titled "${panel}": ${matches.join(", ")}. Pass the full label, such as "${matches[0]}"`);
+  }
+  return matches[0]!;
+}
+
 export class PaseoWeb {
   /** Console errors, page errors and plugin evaluation failures. */
   readonly errors: string[] = [];
@@ -261,12 +271,8 @@ export class PaseoWeb {
         { cause: error },
       );
     }
-    const radio = dialog.getByRole("radio", { name: panelName(panel) });
-    if ((await radio.count()) === 0) {
-      const offered = await dialog.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.getAttribute("aria-label") ?? radio.textContent?.trim() ?? ""));
-      throw new Error(`the panel picker offers no panel named "${panel}"; it offers: ${offered.join(", ")}`);
-    }
-    await radio.click();
+    const offered = await dialog.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.getAttribute("aria-label") ?? radio.textContent?.trim() ?? ""));
+    await dialog.getByRole("radio", { name: pickPanel(panel, offered), exact: true }).click();
     await dialog.getByRole("checkbox", { name: "Don't ask me again", exact: true }).setChecked(remember);
     await dialog.getByRole("button", { name: "Use", exact: true }).click();
   }

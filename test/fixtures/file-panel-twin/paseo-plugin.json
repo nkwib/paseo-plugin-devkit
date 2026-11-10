@@ -1,0 +1,4 @@
+{
+  "id": "file-panel-twin",
+  "requirements": { "paseo": ">=0.13.0" }
+}
