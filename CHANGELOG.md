@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-11-10)
 
 - Add `PaseoWeb.openFiles`, `openFile`, `fileTab`, `chooseFilePanel`, `openWith`, `pinFile`, `closeFile` and `reload` for native file-panel tests. Paths identify tabs by their full workspace-relative name. Tree traversal distinguishes repeated folder names and file basenames.
 - Add `ppd web --open-file PATH --with PANEL` for file-panel screenshots.
