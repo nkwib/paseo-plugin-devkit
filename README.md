@@ -73,16 +73,16 @@ $ npx ppd check examples/hello-plugin
 PASS  manifest         hello-plugin, requires paseo >=0.11.2
 PASS  imports          client, server and shared boundaries hold
 PASS  dependencies     no runtime packages
-PASS  paseo-compile    compilePlugin of the Paseo 0.12.0 app (/Applications/Paseo.app) accepted the plugin
+PASS  paseo-compile    compilePlugin of the Paseo 0.15.3 app (/Applications/Paseo.app) accepted the plugin
 PASS  client-requires  client requires only host modules (@getpaseo/plugin, @getpaseo/plugin/client, react, react-native, react/jsx-runtime, zod)
 PASS  server-requires  server requires only host modules and Node built-ins
 PASS  server-eval      Paseo's evaluator ran the contribution in 0 ms; RPCs: hello.greet
-PASS  client-eval      contributions: addWorkspacePanel, addCommandCenterItem
+PASS  client-eval      contributions: addWorkspacePanel, addCommandCenterItem (Paseo 0.15.3 rules)
 PASS  hermes-class     no class syntax in the client bundle
 SKIP  hermes-parse     hermesc not found (install react-native as a devDependency, or set HERMESC)
 SKIP  hermes-vm        Hermes VM not found (react-native ships it for macOS; or set HERMES)
-PASS  lucide-icons     2 icon name(s) valid against 6354 Lucide icons of the Paseo 0.12.0 app (/Applications/Paseo.app)
-PASS  bundle-size      client 5 KiB (2 KiB gzip), budget 2.0 MiB; server 2 KiB (1 KiB gzip), eval 0 ms, budget 32.0 MiB
+PASS  lucide-icons     2 icon name(s) valid against 6354 Lucide icons of the Paseo 0.15.3 app (/Applications/Paseo.app)
+PASS  bundle-size      client 3 KiB (1 KiB gzip), budget 2.0 MiB; server 2 KiB (1 KiB gzip), eval 0 ms, budget 32.0 MiB
 
 11 passed, 0 warnings, 0 failed, 2 skipped
 
@@ -91,7 +91,7 @@ dev daemon "default" up
   url:   http://127.0.0.1:7800
   home:  $TMPDIR/ppd-default-aiOmq4
   pid:   51399
-  paseo: 0.12.0
+  paseo: 0.15.3
 workspace created for /tmp/demo-workspace
 
 $ npx ppd install examples/hello-plugin    # rerun after edits, or: npx ppd dev examples/hello-plugin
@@ -167,6 +167,26 @@ await assertWithinRpcBudget(() => handlers.get("doc.render")!(worstCaseInput)); 
 ```
 
 `paseo-plugin-devkit/web` exports the `PaseoWeb` Playwright page object for your own browser tests.
+
+File-panel tests can use the real Files tree and native tab menu:
+
+```ts
+const ui = await PaseoWeb.launch({ url: daemon.url });
+try {
+  await ui.openWorkspace(serverId, workspaceId);
+  await ui.openFile("reports/live.csv", { panel: "Viewer \u2014 paseo-doc-viewer", remember: true });
+  await ui.pinFile("reports/live.csv");
+  await ui.reload();
+  await ui.openWith("reports/live.csv", "Source \u2014 Paseo");
+  await ui.closeFile("reports/live.csv");
+} finally {
+  await ui.close();
+}
+```
+
+Paths are workspace-relative, use `/`, and must not contain `.` or `..` segments. Tab helpers use the full relative path, even when the visible tab shows only its basename. `openFile` focuses an existing tab, otherwise opens through Files, scrolling long trees to find the row. Pass `panel` when a picker is expected; the helper waits up to 10 s for it even when the tab appears first, then fails with a clear error. Panel names accept a unique title or the full host label; an ambiguous title fails instead of choosing a plugin. Omit `panel` when reopening with a saved association; use `openWith` to change it. These helpers target desktop file tabs; compact file sheets can be exercised through `ui.page`.
+
+The CLI accepts the same opening step: `ppd web --workspace <id> --open-file report.pdf --shot report.png`. Add `--with Viewer` for files with a panel picker. `PPD_E2E=1 npx vitest run test/file-panels-e2e.test.ts` exercises duplicate folder and file names, a file below 400 others, a nested CSV, a panel requested without a picker, remembered panel choice, rewrite, deletion, restoration, app reload and tab closure on a fresh isolated daemon; it removes the daemon and temporary workspace on failure too.
 
 ## Fake agent
 
@@ -249,7 +269,7 @@ It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and run
 
 ## Compatibility
 
-Verified on macOS with Paseo 0.12.0 (desktop app and CLI). CI runs on Linux without Paseo, where daemon tests skip and `ppd check` runs as an approximation.
+Verified on macOS with Paseo 0.15.3 (desktop app compiler, CLI and served web UI). CI runs on Linux without Paseo, where daemon tests skip and `ppd check` runs as an approximation. The file-panel lifecycle test uses a real isolated daemon and Chrome; it does not verify the native iOS or Android app.
 
 ### React Native, React and Dependabot
 
@@ -288,11 +308,11 @@ Review a series upgrade explicitly when the supported host and its React/SDK con
 - Without the Paseo app or `PASEO_SOURCE` (Linux CI) the compile is an approximation and icon names are checked only against the plugin's own `lucide-react-native`, if any.
 - Time limits are 30 s per evaluated bundle and 120 s for the real compile, server evaluation included. There is no CLI flag; `runChecks` and `describeHostContract` take `evalTimeoutMs` and `compileTimeoutMs`.
 - The 32 MiB relay budget comes from field experience, not from Paseo source; direct connections allow 100 MiB.
-- `ppd web` needs Google Chrome or a Playwright Chromium matching `playwright-core`. Its selectors follow the Paseo 0.12 web UI and may need updates when the app changes.
+- `ppd web` needs Google Chrome or a Playwright Chromium matching `playwright-core`. Its selectors were exercised on Paseo 0.15.3 and may need updates when the app changes.
 - No iOS command: the simulator build is manual (see the skill). No multi-touch injection for Android.
 - `ppd release` and `ppd registry update` are tested against local Git repos and a stub validator, not yet end to end against GitHub and the live registry.
 - The daemon end-to-end tests are opt-in (`PPD_E2E=1 npm test`, `PPD_E2E_PORT` to pin the port) because CI has no Paseo CLI.
-- macOS and Linux only. Tested on macOS with Paseo 0.12.0 (see [Compatibility](#compatibility)).
+- macOS and Linux only. Tested on macOS with Paseo 0.15.3 (see [Compatibility](#compatibility)).
 
 ## Roadmap
 

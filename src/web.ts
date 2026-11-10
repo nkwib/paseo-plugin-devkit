@@ -46,6 +46,13 @@ export interface LaunchOptions {
   executablePath?: string;
 }
 
+export interface FileOpenOptions {
+  /** Answer an expected panel picker with this unique title or full host label. Omit for a saved association. */
+  panel?: string;
+  /** Remember the panel choice when the host shows its picker. */
+  remember?: boolean;
+}
+
 const CHROME_PATHS: Record<string, string[]> = {
   darwin: ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"],
   linux: ["/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"],
@@ -74,6 +81,11 @@ async function launchBrowser(options: LaunchOptions): Promise<Browser> {
 export function pluginEvaluationFailure(text: string): string | null {
   const match = /^\[Plugins\] Failed to evaluate [^/\s]+\/(\S+)\s*(.*)$/m.exec(text);
   return match ? `${match[1]}: ${match[2]?.trim() || "unknown error"}` : null;
+}
+
+function panelName(panel: string): RegExp {
+  const escaped = panel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^${escaped}(?: \\u2014 .+)?$`);
 }
 
 export class PaseoWeb {
@@ -110,8 +122,13 @@ export class PaseoWeb {
       hasTouch: compact,
     });
     const web = new PaseoWeb(browser, page, options.url.replace(/\/$/, ""));
-    await web.gotoRoute("/");
-    return web;
+    try {
+      await web.gotoRoute("/");
+      return web;
+    } catch (error) {
+      await browser.close().catch(() => {});
+      throw error;
+    }
   }
 
   /** Waits for the app shell: the sidebar on wide layouts, the menu button on compact ones. */
@@ -130,6 +147,150 @@ export class PaseoWeb {
   async openWorkspace(serverId: string, workspaceId: string): Promise<void> {
     await this.gotoRoute(`/h/${serverId}/workspace/${workspaceId}`);
     await waitForUi(this.page.getByLabel("Workspace actions", { exact: true }).first(), 'the workspace (a "Workspace actions" button)', 30_000);
+  }
+
+  /** Open the host's Files tree in the current workspace. */
+  async openFiles(): Promise<void> {
+    const browse = this.page.getByRole("button", { name: "Browse workspace files", exact: true });
+    if (!(await browse.isVisible())) {
+      await this.page.getByRole("button", { name: "Open Explorer sidebar", exact: true }).click();
+    }
+    await browse.click();
+  }
+
+  /** A native file tab, whose accessible name is the workspace-relative path. */
+  fileTab(path: string): Locator {
+    return this.page.getByRole("button", { name: path, exact: true });
+  }
+
+  private async fileRow(path: string, timeout = 30_000): Promise<Locator> {
+    // Paseo's tree is a flat, virtualized list: row ids are flat indices, indentation supplies ancestry, and only rows
+    // near the viewport exist. Scan from the top, remembering rows by index, so ancestry survives scrolling and a
+    // basename never matches the same name in another folder.
+    const deadline = Date.now() + timeout;
+    const rows = new Map<number, { indent: number; name: string }>();
+    let fromTop = true;
+    for (;;) {
+      if (fromTop) {
+        rows.clear();
+        await this.scrollFiles("top");
+      }
+      const view: { seen: [number, number, string][]; end: boolean } | null = await this.page.evaluate(() => {
+        const scroller = document.querySelector<HTMLElement>('[data-testid="file-explorer-tree-scroll"]');
+        if (!scroller) return null;
+        const seen: [number, number, string][] = [];
+        for (const row of scroller.querySelectorAll<HTMLElement>('[data-testid^="file-explorer-row-"]')) {
+          const index = /^file-explorer-row-(\d+)$/.exec(row.dataset.testid ?? "")?.[1];
+          const name = row.querySelector('[data-testid$="-name"]')?.textContent;
+          if (index !== undefined && name) seen.push([Number(index), Number.parseFloat(getComputedStyle(row).paddingLeft), name]);
+        }
+        return { seen, end: scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1 };
+      });
+      for (const [index, indent, name] of view?.seen ?? []) rows.set(index, { indent, name });
+      const parents: { indent: number; name: string }[] = [];
+      for (let index = 0; rows.has(index); index++) {
+        const { indent, name } = rows.get(index)!;
+        while (parents.length && parents.at(-1)!.indent >= indent) parents.pop();
+        if ([...parents.map((parent) => parent.name), name].join("/") === path) return this.page.getByTestId(`file-explorer-row-${index}`);
+        parents.push({ indent, name });
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `the Paseo Files tree did not list ${path} within ${timeout / 1000} s. Check that the file exists in the workspace. ppd reads the tree of the Paseo ${VERIFIED_PASEO} web UI; a different version may have changed it (please report it at ${ISSUES_URL})`,
+        );
+      }
+      // Past the end, or before the tree mounts, start over: the listing may still be loading.
+      fromTop = !view || view.end;
+      if (fromTop) await this.page.waitForTimeout(250);
+      else await this.scrollFiles("down");
+    }
+  }
+
+  /** Scroll the Files tree and give the virtualized list a moment to render the new rows. */
+  private async scrollFiles(to: "top" | "down"): Promise<void> {
+    await this.page.evaluate((to) => {
+      const scroller = document.querySelector<HTMLElement>('[data-testid="file-explorer-tree-scroll"]');
+      if (scroller) scroller.scrollTop = to === "top" ? 0 : scroller.scrollTop + scroller.clientHeight / 2;
+    }, to);
+    await this.page.waitForTimeout(50);
+  }
+
+  /** Open a workspace-relative path through the real Files tree, never through plugin navigation. */
+  async openFile(path: string, options: FileOpenOptions = {}): Promise<Locator> {
+    const parts = path.split("/");
+    if (parts.some((part) => !part || part === "." || part === "..") || path.includes("\\") || /^[a-z]:/i.test(path)) {
+      throw new UsageError("file path must be workspace-relative, with / separators and no . or .. segments");
+    }
+    if (await this.fileTab(path).isVisible()) {
+      await this.fileTab(path).click();
+      return this.fileTab(path);
+    }
+    await this.openFiles();
+    for (let index = 0; index < parts.length - 1; index++) {
+      const folder = await this.fileRow(parts.slice(0, index + 1).join("/"));
+      await folder.click({ button: "right" });
+      await this.page.getByRole("menuitem", { name: "Copy relative path", exact: true }).waitFor({ state: "visible" });
+      const expanded = await this.page.getByRole("menuitem", { name: "Collapse folder", exact: true }).isVisible();
+      await this.page.keyboard.press("Escape");
+      if (!expanded) await folder.click();
+    }
+    await (await this.fileRow(path)).dblclick();
+    // The tab can mount before the file metadata and picker arrive. Wait for the actual radio,
+    // rather than treating an early tab as evidence that a saved association bypassed the picker.
+    if (options.panel) await this.chooseFilePanel(options.panel, options.remember);
+    const tab = this.fileTab(path);
+    await waitForUi(tab, `file tab ${path}`, 30_000);
+    return tab;
+  }
+
+  /**
+   * Answer Paseo's panel picker. Fails within `timeoutMs` when no picker appears (a saved association or a single
+   * matching panel opens the file directly); change a saved association with openWith instead.
+   */
+  async chooseFilePanel(panel: string, remember = false, timeoutMs = 10_000): Promise<void> {
+    const dialog = this.page.getByRole("dialog").filter({ has: this.page.getByRole("radio") });
+    try {
+      await dialog.first().waitFor({ timeout: timeoutMs });
+    } catch (error) {
+      if ((error as Error).name !== "TimeoutError") throw error;
+      throw new Error(
+        `no panel picker appeared within ${timeoutMs / 1000} s, so "${panel}" was not chosen: the file opens directly with a saved association or its only panel. Omit the panel (--with), or switch panels with openWith`,
+        { cause: error },
+      );
+    }
+    const radio = dialog.getByRole("radio", { name: panelName(panel) });
+    if ((await radio.count()) === 0) {
+      const offered = await dialog.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.getAttribute("aria-label") ?? radio.textContent?.trim() ?? ""));
+      throw new Error(`the panel picker offers no panel named "${panel}"; it offers: ${offered.join(", ")}`);
+    }
+    await radio.click();
+    await dialog.getByRole("checkbox", { name: "Don't ask me again", exact: true }).setChecked(remember);
+    await dialog.getByRole("button", { name: "Use", exact: true }).click();
+  }
+
+  /** Select a panel in the native tab menu, using a unique title or full host label. */
+  async openWith(name: string, panel: string): Promise<void> {
+    await this.fileTab(name).click({ button: "right" });
+    await this.page.getByRole("menuitem", { name: "Open with…", exact: true }).hover();
+    await this.page.getByRole("menuitem", { name: panelName(panel) }).click();
+  }
+
+  /** Keep a preview tab open when another file is opened. */
+  async pinFile(name: string): Promise<void> {
+    await this.fileTab(name).dblclick();
+  }
+
+  async closeFile(name: string): Promise<void> {
+    const tab = this.fileTab(name);
+    await tab.hover();
+    await tab.locator("..").getByRole("button", { name: "Close", exact: true }).click();
+    await tab.waitFor({ state: "detached" });
+  }
+
+  /** Reload the actual app, preserving browser storage and the host's restored tabs. */
+  async reload(): Promise<void> {
+    await this.page.reload();
+    await this.ready();
   }
 
   /** An element by its exact accessible name, such as a plugin header button's label. */
@@ -221,10 +382,13 @@ export async function webCommand(args: string[]): Promise<number> {
       wait: { type: "string" },
       headed: { type: "boolean" },
       "full-page": { type: "boolean" },
+      "open-file": { type: "string" },
+      with: { type: "string" },
     },
     strict: true,
   });
   if (values.wait !== undefined && !/^\d+$/.test(values.wait)) throw new UsageError(`--wait must be milliseconds, got ${values.wait}`);
+  if (values.with && !values["open-file"]) throw new UsageError("--with requires --open-file");
   const daemon = requireDaemon(values.name);
   if (!daemon.webDist) throw new Error("this dev daemon has no web UI: restart it with `ppd daemon up --web-dist <dir>`");
   const viewport = values.viewport ? parseViewport(values.viewport) : undefined;
@@ -246,6 +410,7 @@ export async function webCommand(args: string[]): Promise<number> {
       }
     }
     if (values.command) await web.runCommand(values.command);
+    if (values["open-file"]) await web.openFile(values["open-file"], { panel: values.with });
     for (const label of values.click ?? []) await web.click(label);
     await web.page.waitForTimeout(values.wait ? Number(values.wait) : 1500);
     if (values.shot) console.log(`screenshot: ${await web.shot(values.shot, values["full-page"])}`);

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+- Add `PaseoWeb.openFiles`, `openFile`, `fileTab`, `chooseFilePanel`, `openWith`, `pinFile`, `closeFile` and `reload` for native file-panel tests. Paths identify tabs by their full workspace-relative name. Tree traversal distinguishes repeated folder names and file basenames.
+- Add `ppd web --open-file PATH --with PANEL` for file-panel screenshots.
+- `openFile` scrolls long Files trees to find the row. A requested panel without a picker, an unknown panel or a missing file fail with a clear message.
+- Without a Paseo host and without `requirements.paseo`, `ppd check` now applies the Paseo 0.15.3 client contract instead of 0.12.0, including the 0.13.0 rules.
+- Verify the daemon, compiler and web UI on Paseo 0.15.3. Add an isolated nested-file regression covering panel selection, changes, deletion, restoration, reload and reopening.
+- Close the browser when initial app navigation fails.
+
 ## 0.2.0 (2026-10-30)
 
 - Verified on Paseo 0.12.0: `ppd daemon up` and `ppd doctor` no longer print the version note on it.
