@@ -73,16 +73,16 @@ $ npx ppd check examples/hello-plugin
 PASS  manifest         hello-plugin, requires paseo >=0.11.2
 PASS  imports          client, server and shared boundaries hold
 PASS  dependencies     no runtime packages
-PASS  paseo-compile    compilePlugin of the Paseo 0.12.0 app (/Applications/Paseo.app) accepted the plugin
+PASS  paseo-compile    compilePlugin of the Paseo 0.15.3 app (/Applications/Paseo.app) accepted the plugin
 PASS  client-requires  client requires only host modules (@getpaseo/plugin, @getpaseo/plugin/client, react, react-native, react/jsx-runtime, zod)
 PASS  server-requires  server requires only host modules and Node built-ins
 PASS  server-eval      Paseo's evaluator ran the contribution in 0 ms; RPCs: hello.greet
-PASS  client-eval      contributions: addWorkspacePanel, addCommandCenterItem
+PASS  client-eval      contributions: addWorkspacePanel, addCommandCenterItem (Paseo 0.15.3 rules)
 PASS  hermes-class     no class syntax in the client bundle
 SKIP  hermes-parse     hermesc not found (install react-native as a devDependency, or set HERMESC)
 SKIP  hermes-vm        Hermes VM not found (react-native ships it for macOS; or set HERMES)
-PASS  lucide-icons     2 icon name(s) valid against 6354 Lucide icons of the Paseo 0.12.0 app (/Applications/Paseo.app)
-PASS  bundle-size      client 5 KiB (2 KiB gzip), budget 2.0 MiB; server 2 KiB (1 KiB gzip), eval 0 ms, budget 32.0 MiB
+PASS  lucide-icons     2 icon name(s) valid against 6354 Lucide icons of the Paseo 0.15.3 app (/Applications/Paseo.app)
+PASS  bundle-size      client 3 KiB (1 KiB gzip), budget 2.0 MiB; server 2 KiB (1 KiB gzip), eval 0 ms, budget 32.0 MiB
 
 11 passed, 0 warnings, 0 failed, 2 skipped
 
@@ -91,7 +91,7 @@ dev daemon "default" up
   url:   http://127.0.0.1:7800
   home:  $TMPDIR/ppd-default-aiOmq4
   pid:   51399
-  paseo: 0.12.0
+  paseo: 0.15.3
 workspace created for /tmp/demo-workspace
 
 $ npx ppd install examples/hello-plugin    # rerun after edits, or: npx ppd dev examples/hello-plugin
