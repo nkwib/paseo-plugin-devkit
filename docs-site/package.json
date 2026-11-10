@@ -29,7 +29,7 @@
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "mdsvex": "^0.12.8",
     "prismjs": "^1.30.0",
-    "svelte": "^5.57.2",
-    "vite": "^8.3.4"
+    "svelte": "^5.57.3",
+    "vite": "^8.3.5"
   }
 }
