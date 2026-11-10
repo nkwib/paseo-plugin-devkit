@@ -120,6 +120,11 @@ describe.skipIf(!enabled)("native file-tab helpers (PPD_E2E=1)", () => {
       .rejects.toThrow('the panel picker offers 2 panels titled "Fixture": ');
     await ui.chooseFilePanel("Fixture \u2014 file-panel-twin");
     await expect.poll(() => ui.page.getByText("Twin panel", { exact: true }).isVisible()).toBe(true);
+    await expect(ui.openWith("twin.tsv", "Fixture")).rejects.toThrow('the "Open with" menu offers 2 panels titled "Fixture": ');
+    await ui.page.keyboard.press("Escape");
+    await ui.page.keyboard.press("Escape");
+    await ui.openWith("twin.tsv", "Fixture \u2014 file-panel-fixture");
+    await expect.poll(() => ui.page.getByText("Twin\t5", { exact: true }).isVisible()).toBe(true);
     await ui.closeFile("twin.tsv");
     expect(ui.pluginErrors).toEqual([]);
   }, 180_000);

@@ -40,5 +40,10 @@ describe("web helpers", () => {
     );
     expect(() => pickPanel("View", offered)).toThrow(/offers no panel named "View"; it offers: Source, Viewer/);
     expect(() => pickPanel("Viewer \u2014 csv", offered)).toThrow(/no panel named/);
+    expect(() => pickPanel("Viewer", offered, 'the "Open with" menu')).toThrow(/^the "Open with" menu offers 2 panels titled "Viewer"/);
+    const twins = ["Viewer \u2014 doc-viewer", "Viewer \u2014 doc-viewer", "Source \u2014 Paseo"];
+    for (const name of ["Viewer", "Viewer \u2014 doc-viewer"]) {
+      expect(() => pickPanel(name, twins)).toThrow('the panel picker offers 2 panels labelled "Viewer \u2014 doc-viewer", which ppd cannot tell apart; give the panels distinct titles');
+    }
   });
 });

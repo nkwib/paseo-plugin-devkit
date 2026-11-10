@@ -90,12 +90,15 @@ function panelName(panel: string): RegExp {
   return new RegExp(`^${escaped}(?: \\u2014 .+)?$`);
 }
 
-/** The one picker label that `panel` names, by unique title or full "Title \u2014 owner" label. */
-export function pickPanel(panel: string, offered: readonly string[]): string {
+/** The one offered label that `panel` names, by unique title or full "Title \u2014 owner" label. */
+export function pickPanel(panel: string, offered: readonly string[], where = "the panel picker"): string {
   const matches = offered.filter((label) => panelName(panel).test(label));
-  if (matches.length === 0) throw new Error(`the panel picker offers no panel named "${panel}"; it offers: ${offered.join(", ")}`);
+  if (matches.length === 0) throw new Error(`${where} offers no panel named "${panel}"; it offers: ${offered.join(", ")}`);
+  if (new Set(matches).size === 1 && matches.length > 1) {
+    throw new Error(`${where} offers ${matches.length} panels labelled "${matches[0]}", which ppd cannot tell apart; give the panels distinct titles`);
+  }
   if (matches.length > 1) {
-    throw new Error(`the panel picker offers ${matches.length} panels titled "${panel}": ${matches.join(", ")}. Pass the full label, such as "${matches[0]}"`);
+    throw new Error(`${where} offers ${matches.length} panels titled "${panel}": ${matches.join(", ")}. Pass the full label, such as "${matches[0]}"`);
   }
   return matches[0]!;
 }
@@ -281,7 +284,11 @@ export class PaseoWeb {
   async openWith(name: string, panel: string): Promise<void> {
     await this.fileTab(name).click({ button: "right" });
     await this.page.getByRole("menuitem", { name: "Open with…", exact: true }).hover();
-    await this.page.getByRole("menuitem", { name: panelName(panel) }).click();
+    const panels = this.page.getByRole("menuitem", { name: / \u2014 / });
+    await waitForUi(panels.first(), 'the "Open with" panel list', 10_000);
+    // The tab menu's own items carry no " \u2014 owner" suffix; only the submenu's panels do.
+    const offered = await panels.evaluateAll((items) => items.map((item) => item.textContent?.trim() ?? ""));
+    await this.page.getByRole("menuitem", { name: pickPanel(panel, offered, 'the "Open with" menu'), exact: true }).click();
   }
 
   /** Keep a preview tab open when another file is opened. */
