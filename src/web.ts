@@ -152,9 +152,10 @@ export class PaseoWeb {
   /** Open the host's Files tree in the current workspace. */
   async openFiles(): Promise<void> {
     const browse = this.page.getByRole("button", { name: "Browse workspace files", exact: true });
-    if (!(await browse.isVisible())) {
-      await this.page.getByRole("button", { name: "Open Explorer sidebar", exact: true }).click();
-    }
+    const sidebar = this.page.getByRole("button", { name: "Open Explorer sidebar", exact: true });
+    // After a reload the restored sidebar mounts after the app shell: wait for either control before choosing.
+    await waitForUi(browse.or(sidebar).first(), 'the Files button or an "Open Explorer sidebar" button', 30_000);
+    if (!(await browse.isVisible())) await sidebar.click();
     await browse.click();
   }
 
