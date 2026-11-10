@@ -163,28 +163,56 @@ export class PaseoWeb {
     return this.page.getByRole("button", { name: path, exact: true });
   }
 
-  private async fileRow(path: string): Promise<Locator> {
-    // Paseo's tree is a flat list: indentation supplies ancestry, and row ids supply identity.
-    // Matching names across the page can open a different file with the same basename.
-    const found = await this.page.waitForFunction((wanted) => {
+  private async fileRow(path: string, timeout = 30_000): Promise<Locator> {
+    // Paseo's tree is a flat, virtualized list: row ids are flat indices, indentation supplies ancestry, and only rows
+    // near the viewport exist. Scan from the top, remembering rows by index, so ancestry survives scrolling and a
+    // basename never matches the same name in another folder.
+    const deadline = Date.now() + timeout;
+    const rows = new Map<number, { indent: number; name: string }>();
+    let fromTop = true;
+    for (;;) {
+      if (fromTop) {
+        rows.clear();
+        await this.scrollFiles("top");
+      }
+      const view: { seen: [number, number, string][]; end: boolean } | null = await this.page.evaluate(() => {
+        const scroller = document.querySelector<HTMLElement>('[data-testid="file-explorer-tree-scroll"]');
+        if (!scroller) return null;
+        const seen: [number, number, string][] = [];
+        for (const row of scroller.querySelectorAll<HTMLElement>('[data-testid^="file-explorer-row-"]')) {
+          const index = /^file-explorer-row-(\d+)$/.exec(row.dataset.testid ?? "")?.[1];
+          const name = row.querySelector('[data-testid$="-name"]')?.textContent;
+          if (index !== undefined && name) seen.push([Number(index), Number.parseFloat(getComputedStyle(row).paddingLeft), name]);
+        }
+        return { seen, end: scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1 };
+      });
+      for (const [index, indent, name] of view?.seen ?? []) rows.set(index, { indent, name });
       const parents: { indent: number; name: string }[] = [];
-      const rows = document.querySelector('[data-testid="files-empty-area"]')?.querySelectorAll<HTMLElement>('[data-testid^="file-explorer-row-"]') ?? [];
-      for (const row of rows) {
-        if (!/^file-explorer-row-\d+$/.test(row.dataset.testid ?? "")) continue;
-        const name = row.querySelector('[data-testid$="-name"]')?.textContent;
-        if (!name) continue;
-        const indent = Number.parseFloat(getComputedStyle(row).paddingLeft);
+      for (let index = 0; rows.has(index); index++) {
+        const { indent, name } = rows.get(index)!;
         while (parents.length && parents.at(-1)!.indent >= indent) parents.pop();
-        if ([...parents.map((parent) => parent.name), name].join("/") === wanted) return row.dataset.testid;
+        if ([...parents.map((parent) => parent.name), name].join("/") === path) return this.page.getByTestId(`file-explorer-row-${index}`);
         parents.push({ indent, name });
       }
-      return null;
-    }, path, { timeout: 30_000 });
-    try {
-      return this.page.getByTestId((await found.jsonValue()) as string);
-    } finally {
-      await found.dispose();
+      if (Date.now() > deadline) {
+        throw new Error(
+          `the Paseo Files tree did not list ${path} within ${timeout / 1000} s. Check that the file exists in the workspace. ppd reads the tree of the Paseo ${VERIFIED_PASEO} web UI; a different version may have changed it (please report it at ${ISSUES_URL})`,
+        );
+      }
+      // Past the end, or before the tree mounts, start over: the listing may still be loading.
+      fromTop = !view || view.end;
+      if (fromTop) await this.page.waitForTimeout(250);
+      else await this.scrollFiles("down");
     }
+  }
+
+  /** Scroll the Files tree and give the virtualized list a moment to render the new rows. */
+  private async scrollFiles(to: "top" | "down"): Promise<void> {
+    await this.page.evaluate((to) => {
+      const scroller = document.querySelector<HTMLElement>('[data-testid="file-explorer-tree-scroll"]');
+      if (scroller) scroller.scrollTop = to === "top" ? 0 : scroller.scrollTop + scroller.clientHeight / 2;
+    }, to);
+    await this.page.waitForTimeout(50);
   }
 
   /** Open a workspace-relative path through the real Files tree, never through plugin navigation. */
@@ -215,10 +243,27 @@ export class PaseoWeb {
     return tab;
   }
 
-  /** Answer Paseo's panel picker. A saved association is changed with openWith instead. */
-  async chooseFilePanel(panel: string, remember = false): Promise<void> {
-    const dialog = this.page.getByRole("dialog");
-    await dialog.getByRole("radio", { name: panelName(panel) }).click();
+  /**
+   * Answer Paseo's panel picker. Fails within `timeoutMs` when no picker appears (a saved association or a single
+   * matching panel opens the file directly); change a saved association with openWith instead.
+   */
+  async chooseFilePanel(panel: string, remember = false, timeoutMs = 10_000): Promise<void> {
+    const dialog = this.page.getByRole("dialog").filter({ has: this.page.getByRole("radio") });
+    try {
+      await dialog.first().waitFor({ timeout: timeoutMs });
+    } catch (error) {
+      if ((error as Error).name !== "TimeoutError") throw error;
+      throw new Error(
+        `no panel picker appeared within ${timeoutMs / 1000} s, so "${panel}" was not chosen: the file opens directly with a saved association or its only panel. Omit the panel (--with), or switch panels with openWith`,
+        { cause: error },
+      );
+    }
+    const radio = dialog.getByRole("radio", { name: panelName(panel) });
+    if ((await radio.count()) === 0) {
+      const offered = await dialog.getByRole("radio").evaluateAll((radios) => radios.map((radio) => radio.getAttribute("aria-label") ?? radio.textContent?.trim() ?? ""));
+      throw new Error(`the panel picker offers no panel named "${panel}"; it offers: ${offered.join(", ")}`);
+    }
+    await radio.click();
     await dialog.getByRole("checkbox", { name: "Don't ask me again", exact: true }).setChecked(remember);
     await dialog.getByRole("button", { name: "Use", exact: true }).click();
   }

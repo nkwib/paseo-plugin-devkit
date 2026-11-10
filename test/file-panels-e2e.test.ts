@@ -26,6 +26,9 @@ describe.skipIf(!enabled)("native file-tab helpers (PPD_E2E=1)", () => {
     writeFileSync(join(workspace, "archive/reports/live.csv"), "Nested decoy,0\n");
     writeFileSync(join(workspace, "reports/live.csv"), "Before rewrite,1\n");
     writeFileSync(join(workspace, "live.csv"), "Root decoy,0\n");
+    // More files than the virtualized Files tree renders at once.
+    for (let index = 0; index < 400; index++) writeFileSync(join(workspace, `filler-${String(index).padStart(3, "0")}.txt`), "");
+    writeFileSync(join(workspace, "zz-last.csv"), "Last row,4\n");
     const daemon = await daemonUp({ name, workspace, log: () => {} });
     const cli = (args: string[]) => {
       const result = runPaseo(daemon.paseoBin, daemon.home, [...args, "--json"]);
@@ -59,11 +62,18 @@ describe.skipIf(!enabled)("native file-tab helpers (PPD_E2E=1)", () => {
     }
   });
 
-  it("distinguishes duplicate folder and file names in an already expanded tree", async () => {
+  it("distinguishes duplicate folder and file names in a collapsed tree", async () => {
     await web!.openFile("archive/reports/live.csv", { panel: "Fixture" });
     await expect.poll(() => web!.page.getByText("Nested decoy,0", { exact: true }).isVisible()).toBe(true);
     await web!.closeFile("archive/reports/live.csv");
   });
+
+  it("finds a row beyond the rendered part of a long tree", async () => {
+    await web!.openFile("zz-last.csv", { panel: "Fixture" });
+    await expect.poll(() => web!.page.getByText("Last row,4", { exact: true }).isVisible()).toBe(true);
+    await web!.closeFile("zz-last.csv");
+    await expect(web!.openFile("missing.csv")).rejects.toThrow(/did not list missing\.csv/);
+  }, 120_000);
 
   it("opens a nested file, selects a panel, watches changes, restores a pinned tab, switches panels and closes it", async () => {
     const ui = web!;
@@ -88,6 +98,8 @@ describe.skipIf(!enabled)("native file-tab helpers (PPD_E2E=1)", () => {
     await ui.openFile("reports/live.csv");
     await expect.poll(() => ui.page.getByText("Restored file,3", { exact: true }).isVisible()).toBe(true);
     expect(await ui.page.getByRole("dialog").count()).toBe(0);
+    await ui.closeFile("reports/live.csv");
+    await expect(ui.openFile("reports/live.csv", { panel: "Fixture" })).rejects.toThrow(/no panel picker appeared/);
     await ui.closeFile("reports/live.csv");
     const cli = spawnSync(process.execPath, [CLI, "web", "--name", name, "--workspace", workspace,
       "--open-file", "reports/live.csv", "--with", "Fixture", "--shot", join(scratch("ppd-file-panels-shots-"), "file.png")],
