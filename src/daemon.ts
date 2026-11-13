@@ -258,6 +258,32 @@ export interface DownOptions {
   name?: string;
   keepHome?: boolean;
   log?: (line: string) => void;
+  /** How long SIGTERM gets before SIGKILL. */
+  graceMs?: number;
+}
+
+/**
+ * Stops a dev daemon's process group: SIGTERM, then SIGKILL if it outlives the grace period, but only while the
+ * pid is still this daemon. The pid can exit during the wait and be reused by an unrelated process, and
+ * signalGroup kills a whole process group, so ownership is re-checked right before the forced kill.
+ */
+export async function stopProcessGroup(
+  record: DaemonRecord,
+  options: {
+    graceMs?: number;
+    signal?: (pid: number, signal: NodeJS.Signals) => void;
+    live?: (record: DaemonRecord) => boolean;
+    alive?: (pid: number) => boolean;
+  } = {},
+): Promise<"stopped" | "killed" | "not-ours"> {
+  const signal = options.signal ?? signalGroup;
+  const live = options.live ?? isDaemonLive;
+  const alive = options.alive ?? isPidAlive;
+  signal(record.pid, "SIGTERM");
+  if (await waitFor(() => (alive(record.pid) ? null : true), options.graceMs ?? 15_000, 250)) return "stopped";
+  if (!live(record)) return "not-ours";
+  signal(record.pid, "SIGKILL");
+  return "killed";
 }
 
 export async function daemonDown(options: DownOptions = {}): Promise<boolean> {
@@ -270,11 +296,10 @@ export async function daemonDown(options: DownOptions = {}): Promise<boolean> {
   }
   const home = assertSafeHome(record.home);
   if (isDaemonLive(record)) {
-    signalGroup(record.pid, "SIGTERM");
-    const stopped = await waitFor(() => (isPidAlive(record.pid) ? null : true), 15_000, 250);
-    if (!stopped) signalGroup(record.pid, "SIGKILL");
+    const outcome = await stopProcessGroup(record, { graceMs: options.graceMs });
     await sleep(250);
-    log(`stopped dev daemon "${name}" (pid ${record.pid})`);
+    if (outcome === "not-ours") log(`pid ${record.pid} outlived SIGTERM and is no longer this dev daemon: not forcing it`);
+    else log(`stopped dev daemon "${name}" (pid ${record.pid})`);
   } else if (isPidAlive(record.pid)) {
     log(`pid ${record.pid} is alive but is not this dev daemon; not signalling it`);
   }

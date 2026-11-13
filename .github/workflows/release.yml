@@ -33,18 +33,61 @@ jobs:
           fi
       - name: Package contents
         run: node .github/scripts/check-package.mjs
+      # Pinned to the major: Trusted Publishing needs npm >= 11.5.1, and an npm major must not change the
+      # release path without a commit.
       - name: Update npm for Trusted Publishing support
-        run: npm install -g npm@latest
-      # Versions published by hand are tagged afterwards: skip them instead of failing.
+        run: npm install -g npm@11
+      # Versions published by hand are tagged afterwards: skip them instead of failing, and say so, because a
+      # skipped publish proves nothing about this workflow's own credentials.
       - name: Check whether this version is already on npm
         id: npm
         run: |
-          if npm view "$(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")" version >/dev/null 2>&1; then
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          {
+            echo "name=$name"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+          # A prerelease rehearses this workflow, so it must never take the latest tag.
+          case "$version" in
+            *-*) echo "tag=next" >> "$GITHUB_OUTPUT" ;;
+            *) echo "tag=latest" >> "$GITHUB_OUTPUT" ;;
+          esac
+          if npm view "$name@$version" version >/dev/null 2>&1; then
             echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::$name@$version is already on npm: the publish is skipped, so this run does not exercise Trusted Publishing."
           fi
-      # Trusted Publishing (OIDC) needs no secret. NPM_TOKEN is only a fallback for a first publish made before
-      # the trusted publisher is configured on npmjs.com; delete the secret afterwards.
+      # Trusted Publishing (OIDC) needs no secret and signs provenance itself. setup-node writes an _authToken
+      # line into the runner npmrc; when it carries a value npm takes the legacy token path and never attempts
+      # OIDC, and when it expands to nothing npm can refuse with ENEEDAUTH first. Name which path this run took.
+      - name: Report the npm credential path
+        if: steps.npm.outputs.published != 'true'
+        run: |
+          rc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
+          if [ -f "$rc" ] && grep -q '_authToken' "$rc"; then
+            if grep -qE '_authToken=[[:space:]]*$' "$rc"; then
+              echo "::warning::$rc carries an empty _authToken line; npm may refuse before OIDC is attempted."
+            else
+              echo "::warning::$rc carries a non-empty _authToken; npm will use the legacy token path, not OIDC."
+            fi
+          else
+            echo "No _authToken line in $rc: npm will use Trusted Publishing."
+          fi
       - if: steps.npm.outputs.published != 'true'
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --tag "${{ steps.npm.outputs.tag }}"
+      # The publish is the artifact. Assert the registry serves it, so a run can never be green over a version
+      # nobody can install.
+      - name: Verify npm serves the published version
+        if: steps.npm.outputs.published != 'true'
+        run: |
+          spec="${{ steps.npm.outputs.name }}@${{ steps.npm.outputs.version }}"
+          for attempt in 1 2 3 4 5 6; do
+            if npm view "$spec" version --prefer-online >/dev/null 2>&1; then
+              echo "npm serves $spec"
+              exit 0
+            fi
+            echo "attempt $attempt: npm does not serve $spec yet"
+            sleep 10
+          done
+          echo "npm did not serve $spec although publish reported success" >&2
+          exit 1

@@ -73,15 +73,15 @@ $ npx ppd check examples/hello-plugin
 PASS  manifest         hello-plugin, requires paseo >=0.11.2
 PASS  imports          client, server and shared boundaries hold
 PASS  dependencies     no runtime packages
-PASS  paseo-compile    compilePlugin of the Paseo 0.15.3 app (/Applications/Paseo.app) accepted the plugin
+PASS  paseo-compile    compilePlugin of the Paseo 0.15.4 app (/Applications/Paseo.app) accepted the plugin
 PASS  client-requires  client requires only host modules (@getpaseo/plugin, @getpaseo/plugin/client, react, react-native, react/jsx-runtime, zod)
 PASS  server-requires  server requires only host modules and Node built-ins
 PASS  server-eval      Paseo's evaluator ran the contribution in 0 ms; RPCs: hello.greet
-PASS  client-eval      contributions: addWorkspacePanel, addCommandCenterItem (Paseo 0.15.3 rules)
+PASS  client-eval      contributions: addWorkspacePanel, addCommandCenterItem (checked as Paseo 0.15.4, rules copied from 0.13.0 and confirmed through 0.15.4)
 PASS  hermes-class     no class syntax in the client bundle
 SKIP  hermes-parse     hermesc not found (install react-native as a devDependency, or set HERMESC)
 SKIP  hermes-vm        Hermes VM not found (react-native ships it for macOS; or set HERMES)
-PASS  lucide-icons     2 icon name(s) valid against 6354 Lucide icons of the Paseo 0.15.3 app (/Applications/Paseo.app)
+PASS  lucide-icons     2 icon name(s) valid against 6354 Lucide icons of the Paseo 0.15.4 app (/Applications/Paseo.app)
 PASS  bundle-size      client 3 KiB (1 KiB gzip), budget 2.0 MiB; server 2 KiB (1 KiB gzip), eval 0 ms, budget 32.0 MiB
 
 11 passed, 0 warnings, 0 failed, 2 skipped
@@ -91,7 +91,7 @@ dev daemon "default" up
   url:   http://127.0.0.1:7800
   home:  $TMPDIR/ppd-default-aiOmq4
   pid:   51399
-  paseo: 0.15.3
+  paseo: 0.15.4
 workspace created for /tmp/demo-workspace
 
 $ npx ppd install examples/hello-plugin    # rerun after edits, or: npx ppd dev examples/hello-plugin
@@ -137,7 +137,7 @@ Every command has `ppd <command> --help`.
 | `ppd registry precheck` | OVERVIEW.md lint, media and icon paths, lockfile sync, `build` sanity, listing files committed. |
 | `ppd registry submit` | Prints the prefilled registry form URL (a `tree/<ref>/<path>` URL for a plugin in a repo subfolder) and what to verify after. |
 | `ppd registry update --registry <fork>` | Record-edit branch for a Git release in your registry fork, runs the validator, prints push and PR commands. `--yes` runs them. |
-| `ppd release <patch\|minor\|major\|X.Y.Z>` | Checks the remote first (origin exists, tag not on origin, `git push --dry-run` passes), then bumps, writes the changelog section, commits, tags, pushes and creates the GitHub release. Rerun after a failed push resumes from the push. `--dry-run` prints the commands. |
+| `ppd release <patch\|minor\|major\|X.Y.Z>` | Checks the remote first (origin exists, tag not on origin, `git push --dry-run` passes), then bumps, writes the changelog section, commits, tags, pushes and creates the GitHub release. For a package published to npm it waits for the registry to serve the new version first, so a release page never names a version nobody can install. Rerun after a failed push resumes from the push. `--dry-run` prints the commands. |
 
 ### What `ppd check` verifies
 
@@ -269,7 +269,7 @@ It also has a weekly job that checks out Paseo main, sets `PASEO_SOURCE` and run
 
 ## Compatibility
 
-Verified on macOS with Paseo 0.15.3 (desktop app compiler, CLI and served web UI). CI runs on Linux without Paseo, where daemon tests skip and `ppd check` runs as an approximation. The file-panel lifecycle test uses a real isolated daemon and Chrome; it does not verify the native iOS or Android app.
+Verified on macOS with Paseo 0.15.4 (desktop app compiler, CLI and served web UI). CI runs on Linux without Paseo, where daemon tests skip and `ppd check` runs as an approximation. The file-panel lifecycle test uses a real isolated daemon and Chrome; it does not verify the native iOS or Android app.
 
 ### React Native, React and Dependabot
 
@@ -308,11 +308,11 @@ Review a series upgrade explicitly when the supported host and its React/SDK con
 - Without the Paseo app or `PASEO_SOURCE` (Linux CI) the compile is an approximation and icon names are checked only against the plugin's own `lucide-react-native`, if any.
 - Time limits are 30 s per evaluated bundle and 120 s for the real compile, server evaluation included. There is no CLI flag; `runChecks` and `describeHostContract` take `evalTimeoutMs` and `compileTimeoutMs`.
 - The 32 MiB relay budget comes from field experience, not from Paseo source; direct connections allow 100 MiB.
-- `ppd web` needs Google Chrome or a Playwright Chromium matching `playwright-core`. Its selectors were exercised on Paseo 0.15.3 and may need updates when the app changes.
+- `ppd web` needs Google Chrome or a Playwright Chromium matching `playwright-core`. Its selectors were exercised on Paseo 0.15.4 and may need updates when the app changes.
 - No iOS command: the simulator build is manual (see the skill). No multi-touch injection for Android.
 - `ppd release` and `ppd registry update` are tested against local Git repos and a stub validator, not yet end to end against GitHub and the live registry.
 - The daemon end-to-end tests are opt-in (`PPD_E2E=1 npm test`, `PPD_E2E_PORT` to pin the port) because CI has no Paseo CLI.
-- macOS and Linux only. Tested on macOS with Paseo 0.15.3 (see [Compatibility](#compatibility)).
+- macOS and Linux only. Tested on macOS with Paseo 0.15.4 (see [Compatibility](#compatibility)).
 
 ## Roadmap
 

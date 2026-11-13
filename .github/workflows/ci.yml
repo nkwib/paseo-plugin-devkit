@@ -44,6 +44,17 @@ jobs:
           test "$code" = "3"
       - name: Package contents
         run: node .github/scripts/check-package.mjs
+      # What users install is the tarball, not the source tree: prove the bin resolves and the kit runs from a
+      # global install. README and SKILL.md both tell people to run it through npx.
+      - name: Installed tarball smoke test
+        run: |
+          npm pack
+          pack="$(ls -t ./*.tgz | head -1)"
+          npm install -g "$pack"
+          ppd --version
+          ppd check examples/hello-plugin
+          npm uninstall -g "$(node -p "require('./package.json').name")"
+          rm -f "$pack"
 
   docs-site:
     runs-on: ubuntu-latest

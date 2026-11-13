@@ -60,23 +60,50 @@ export function changelogEntries(subjects: string[]): string[] {
 export interface ReleaseStep {
   description: string;
   argv?: string[];
+  /** A step the CLI performs itself instead of running a command. */
+  kind?: "changelog" | "await-npm";
 }
 
-export function releaseSteps(version: string, branch: string, notesFile: string, hasLock: boolean): ReleaseStep[] {
+/**
+ * Polls npm until the version is served. The tag push triggers the publish, so for an npm package the GitHub
+ * release must wait for it: a release page that names a version npm never served is the failure this prevents.
+ */
+export async function awaitNpmVersion(
+  name: string,
+  version: string,
+  options: { timeoutMs?: number; intervalMs?: number; now?: () => number; view?: (spec: string) => boolean; sleep?: (ms: number) => Promise<void> } = {},
+): Promise<boolean> {
+  const timeoutMs = options.timeoutMs ?? 600_000;
+  const intervalMs = options.intervalMs ?? 10_000;
+  const now = options.now ?? Date.now;
+  const view = options.view ?? ((spec: string) => run("npm", ["view", spec, "version", "--prefer-online"], { timeout: 60_000 }).status === 0);
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = now() + timeoutMs;
+  for (;;) {
+    if (view(`${name}@${version}`)) return true;
+    if (now() >= deadline) return false;
+    await sleep(intervalMs);
+  }
+}
+
+export function releaseSteps(version: string, branch: string, notesFile: string, hasLock: boolean, npmName: string | null = null): ReleaseStep[] {
   const tag = `v${version}`;
   return [
     { description: `set package.json${hasLock ? " and package-lock.json" : ""} version to ${version}`, argv: ["npm", "version", version, "--no-git-tag-version", "--allow-same-version"] },
-    { description: "write the changelog section (if missing)" },
+    { description: "write the changelog section (if missing)", kind: "changelog" },
     { description: "release commit", argv: ["git", "commit", "-am", `chore: release ${version}`] },
     { description: "annotated tag", argv: ["git", "tag", "-a", tag, "-m", tag] },
     { description: "push the branch", argv: ["git", "push", "origin", branch] },
     { description: "push the tag", argv: ["git", "push", "origin", tag] },
+    // For a Git-installed plugin the GitHub release is the artifact, so it is created straight away. For an npm
+    // package the tag triggers the publish, and the release waits for npm to serve it.
+    ...(npmName ? [{ description: `wait for npm to serve ${npmName}@${version}`, kind: "await-npm" as const }] : []),
     { description: "GitHub release", argv: ["gh", "release", "create", tag, "--title", tag, "--notes-file", notesFile, "--verify-tag"] },
   ];
 }
 
 /** HEAD is `chore: release <version>` and tag v<version> points at it: the commit and tag steps already ran. */
-export function isUnpushedRelease(dir: string, version: string): boolean {
+export function isReleaseCommit(dir: string, version: string): boolean {
   const subject = run("git", ["log", "-1", "--format=%s"], { cwd: dir }).stdout.trim();
   if (subject !== `chore: release ${version}`) return false;
   const tagged = run("git", ["rev-parse", "-q", "--verify", `refs/tags/v${version}^{commit}`], { cwd: dir }).stdout.trim();
@@ -108,12 +135,18 @@ export async function releaseCommand(args: string[]): Promise<number> {
   }
   const git = (gitArgs: string[]) => runOrThrow("git", gitArgs, { cwd: dir }).trim();
   const pkgPath = join(dir, "package.json");
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string };
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string; name?: string; private?: boolean };
+  // A private package is never published, so its release waits for nothing.
+  const npmName = pkg.private === true || !pkg.name ? null : pkg.name;
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const hasOrigin = run("git", ["remote", "get-url", "origin"], { cwd: dir }).status === 0;
   const onOrigin = (name: string) => hasOrigin && run("git", ["ls-remote", "--exit-code", "--tags", "origin", `refs/tags/${name}`], { cwd: dir, timeout: 60_000 }).status === 0;
-  // A previous run that committed and tagged but failed to push: finish it instead of releasing the next version.
-  const resume = isUnpushedRelease(dir, pkg.version) && !onOrigin(`v${pkg.version}`);
+  // A previous run that got as far as the commit and tag: finish it instead of releasing the next version. The push
+  // may have failed, or the push landed and the GitHub release did not (an npm publish that never served the
+  // version stops the run there). Both resume; the push steps are no-ops the second time.
+  const released = (name: string) => run("gh", ["release", "view", name], { cwd: dir, timeout: 60_000 }).status === 0;
+  const started = isReleaseCommit(dir, pkg.version);
+  const resume = started && !(onOrigin(`v${pkg.version}`) && released(`v${pkg.version}`));
   const version = resume ? pkg.version : nextVersion(pkg.version, request);
   const tag = `v${version}`;
 
@@ -152,11 +185,11 @@ export async function releaseCommand(args: string[]): Promise<number> {
   const work = mkdtempSync(join(tmpdir(), "ppd-release-"));
   const notesFile = join(work, "notes.md");
   writeFileSync(notesFile, `${section}\n`);
-  const all = releaseSteps(version, branch, notesFile, existsSync(join(dir, "package-lock.json")));
-  const steps = resume ? all.filter((step) => step.argv?.[0] === "gh" || step.argv?.[1] === "push") : all;
+  const all = releaseSteps(version, branch, notesFile, existsSync(join(dir, "package-lock.json")), npmName);
+  const steps = resume ? all.filter((step) => step.argv?.[0] === "gh" || step.argv?.[1] === "push" || step.kind === "await-npm") : all;
   const shown = (argv: string[]) => shellJoin(argv.map((arg) => (arg === notesFile ? "<notes>" : arg)));
   try {
-    if (resume) console.log(`resuming release ${tag}: the release commit and tag exist locally but not on origin (ignoring "${request}")`);
+    if (resume) console.log(`resuming release ${tag}: the release commit and tag exist, ${onOrigin(tag) ? "but no GitHub release does" : "but not on origin"} (ignoring "${request}")`);
     else console.log(`release ${pkg.version} -> ${version} on ${branch}${newChangelog ? " (changelog section generated from commits; edit CHANGELOG.md first to curate it)" : ""}`);
     console.log(`notes:\n${section.split("\n").map((line) => `  ${line}`).join("\n")}\n`);
     for (const step of steps) console.log(`  ${step.argv ? shown(step.argv) : `# ${step.description}`}`);
@@ -178,7 +211,17 @@ export async function releaseCommand(args: string[]): Promise<number> {
         }
         console.log(`$ ${shown(step.argv)}`);
         runOrThrow(step.argv[0]!, step.argv.slice(1), { cwd: dir, stdio: "inherit" });
-      } else if (newChangelog !== null) {
+      } else if (step.kind === "await-npm" && npmName) {
+        console.log(`# ${step.description}`);
+        if (!(await awaitNpmVersion(npmName, version))) {
+          const kept = join(tmpdir(), `ppd-release-${tag}-notes.md`);
+          writeFileSync(kept, `${section}\n`);
+          console.log(`\nnpm has not served ${npmName}@${version}. The tag is pushed, so the release workflow owns the publish: check it.`);
+          console.log(`No GitHub release was created, because it would name a version nobody can install.`);
+          console.log(`Once npm serves it:\n  ${shellJoin(["gh", "release", "create", tag, "--title", tag, "--notes-file", kept, "--verify-tag"])}`);
+          return 1;
+        }
+      } else if (step.kind === "changelog" && newChangelog !== null) {
         writeFileSync(changelogPath, newChangelog);
         if (!changelog) runOrThrow("git", ["add", "CHANGELOG.md"], { cwd: dir });
       }

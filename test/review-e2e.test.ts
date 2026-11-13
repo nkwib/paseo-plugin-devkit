@@ -61,7 +61,8 @@ describe.skipIf(!enabled)("review findings against a dev daemon (PPD_E2E=1)", ()
       const entry = join(dir, "index.client.tsx");
       writeFileSync(entry, readFileSync(entry, "utf8").replace('icon: "Hand"', 'icon: "HandWave"'));
       await waitFor(/dev-loop: client-rejected \(reloaded\)/);
-      expect(lines.join("\n")).toMatch(/Unknown Lucide icon: HandWave/);
+      // The message depends on the host: pre-0.13 "Unknown Lucide icon: X", 0.13 and later the panel-owner form.
+      expect(lines.join("\n")).toMatch(/Unknown Lucide icon: HandWave|unknown Lucide icon "HandWave"/);
     } finally {
       stop();
       await loop;

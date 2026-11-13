@@ -10,7 +10,7 @@ OVERVIEW.md rules: plain factual prose in sentence case; what it does, how it wo
 
 ## Release (user-run)
 
-`ppd release <patch|minor|major|X.Y.Z> --dry-run` shows the exact commands: version bump, changelog section, `chore: release X` commit, annotated tag, push, `gh release create`. Hand the command without `--dry-run` to the user; it refuses to run without a TTY unless `--yes`.
+`ppd release <patch|minor|major|X.Y.Z> --dry-run` shows the exact commands: version bump, changelog section, `chore: release X` commit, annotated tag, push, `gh release create`. For a package published to npm, a wait for the registry to serve the version comes before the GitHub release. Hand the command without `--dry-run` to the user; it refuses to run without a TTY unless `--yes`.
 
 ## First listing
 

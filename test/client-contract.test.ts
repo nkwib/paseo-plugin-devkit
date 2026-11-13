@@ -181,8 +181,8 @@ describe("which version ppd check applies", () => {
 
   it("uses the oldest app requirements.paseo admits when there is no host", async () => {
     const clientEval = async (dir: string) => (await runChecks(dir, { paseoSource: null, paseoApp: null })).find((r) => r.id === "client-eval");
-    expect(await clientEval(plugin(">=0.13.0", fileCall))).toMatchObject({ status: "pass", message: "contributions: addFilePanel (Paseo 0.13.0 rules)" });
-    expect(await clientEval(plugin(">=0.12.0", fileCall))).toMatchObject({ status: "fail", details: [expect.stringContaining("Paseo 0.12.0 has no client.addFilePanel"), "contributions: none (Paseo 0.12.0 rules)"] });
+    expect(await clientEval(plugin(">=0.13.0", fileCall))).toMatchObject({ status: "pass", message: "contributions: addFilePanel (checked as Paseo 0.13.0, rules copied from 0.13.0 and confirmed through 0.15.4)" });
+    expect(await clientEval(plugin(">=0.12.0", fileCall))).toMatchObject({ status: "fail", details: [expect.stringContaining("Paseo 0.12.0 has no client.addFilePanel"), "contributions: none (checked as Paseo 0.12.0, rules copied from the 0.11.2 and 0.12.0 release)"] });
   });
 
   it("warns when the host accepts the client but an older app the range admits rejects it", async () => {
@@ -204,5 +204,73 @@ describe("which version ppd check applies", () => {
     expect(paseoHostVersion(sourceHost("0.12.0", "addWorkspacePanel(contribution) {}"))).toBe("0.12.0");
     expect(paseoHostVersion(sourceHost("0.14.0", "addFilePanel(contribution) {}"))).toBe("0.14.0");
     expect(paseoHostVersion(null)).toBeUndefined();
+  });
+});
+
+describe("theme shape (themes/index.ts at v0.13.0, unchanged through main)", () => {
+  const theme = (patch: Record<string, unknown> = {}) => ({
+    id: "midnight",
+    name: "Midnight",
+    appearance: "dark",
+    colors: { background: "#101010", foreground: "#fff", raised: "#1a1a1a", control: "#222222", border: "#333333", mutedForeground: "#888888", ring: "#44445566" },
+    ...patch,
+  });
+
+  it.each(["0.12.0", "0.14.0"])("accepts a complete theme, with or without accent, on %s", (version) => {
+    expect(
+      errors(
+        version,
+        ["addTheme", theme()],
+        ["addTheme", theme({ id: "daylight", appearance: "light", colors: { ...theme().colors, accent: "#0a84ff" } })],
+      ),
+    ).toEqual([]);
+  });
+
+  it("takes a translation message as the name from 0.13 only", () => {
+    expect(errors("0.14.0", ["addTheme", theme({ name: message })])).toEqual([]);
+    expect(errors("0.12.0", ["addTheme", theme({ name: message })])).toEqual([
+      "Theme midnight has no name: expected a string of 1 to 60 characters",
+    ]);
+  });
+
+  it("reports an empty name and one over 60 characters", () => {
+    expect(errors("0.14.0", ["addTheme", theme({ name: "  " })])).toEqual(["Theme midnight has no name"]);
+    expect(errors("0.14.0", ["addTheme", theme({ name: "x".repeat(61) })])).toEqual([
+      "Theme midnight has a name of 61 characters: the app allows 60",
+    ]);
+  });
+
+  it("reports a missing appearance and one the app does not define", () => {
+    expect(errors("0.14.0", ["addTheme", theme({ appearance: "auto" })])).toEqual([
+      'Theme midnight has an invalid appearance: expected "light" or "dark"',
+    ]);
+    expect(errors("0.14.0", ["addTheme", { id: "midnight", name: "Midnight", colors: theme().colors }])).toEqual([
+      'Theme midnight has an invalid appearance: expected "light" or "dark"',
+    ]);
+  });
+
+  it("reports missing, unknown and non-hex colors", () => {
+    const { background: _dropped, ...rest } = theme().colors;
+    expect(errors("0.14.0", ["addTheme", theme({ colors: rest })])).toEqual(["Theme midnight is missing colors: background"]);
+    expect(errors("0.14.0", ["addTheme", theme({ colors: { ...theme().colors, surface: "#000000" } })])).toEqual([
+      "Theme midnight has colors the app does not accept: surface",
+    ]);
+    expect(errors("0.14.0", ["addTheme", theme({ colors: { ...theme().colors, border: "red", ring: "#4442" } })])).toEqual([
+      "Theme midnight has colors that are not hex colors (#rgb, #rrggbb or #rrggbbaa): border, ring",
+    ]);
+    expect(errors("0.14.0", ["addTheme", theme({ colors: undefined })])).toEqual([
+      "Theme midnight has no colors: expected background, foreground, raised, control, border, mutedForeground, ring and the optional accent",
+    ]);
+  });
+
+  it("takes accent left undefined, as the optional field does", () => {
+    expect(errors("0.14.0", ["addTheme", theme({ colors: { ...theme().colors, accent: undefined } })])).toEqual([]);
+  });
+
+  it("reports a key the strict schema refuses, and still reports duplicate ids", () => {
+    expect(errors("0.14.0", ["addTheme", theme({ swatch: "#000000" })])).toEqual([
+      "Theme midnight has keys the app does not accept: swatch",
+    ]);
+    expect(errors("0.14.0", ["addTheme", theme()], ["addTheme", theme()])).toEqual(["Duplicate theme: midnight"]);
   });
 });

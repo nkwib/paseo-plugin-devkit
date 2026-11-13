@@ -5,6 +5,8 @@ A Paseo plugin that reacts to agent turns. When a turn that used tools ends, the
 "All turns" button opens a screen that lists every summary for that agent through an RPC.
 
 - `index.server.ts`: `server.on("agent.turn_ended")` plus `paseo.agents.ref(id).timeline.append(...)`.
+  Paseo 0.14 and later emit the hook with an empty `timeline`, so the turn is read back with
+  `timeline.refetch({ direction: "tail" })`. Trusting `event.timeline` there gives you a turn with no tool calls.
 - `server/summarize.ts`: pure turn-to-summary logic, unit tested in `test/summarize.test.ts`.
 - `shared/turn-summary.ts`: the card schema and the list RPC.
 - `client/summary-card.tsx`: the timeline renderer. Renderers get no navigation props, so it closes over the

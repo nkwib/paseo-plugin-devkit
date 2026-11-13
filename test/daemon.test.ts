@@ -2,7 +2,7 @@ import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildDaemonConfig, daemonDown, pickPort, readDaemon, type DaemonRecord } from "../src/daemon.ts";
+import { buildDaemonConfig, daemonDown, pickPort, readDaemon, stopProcessGroup, type DaemonRecord } from "../src/daemon.ts";
 import { HOME_MARKER, SafetyError } from "../src/safety.ts";
 import { scratch } from "./helpers.ts";
 
@@ -92,5 +92,32 @@ describe("daemonDown", () => {
 
   it("rejects state names that could escape the state dir", async () => {
     expect(() => readDaemon("../x")).toThrow(SafetyError);
+  });
+});
+
+describe("stopProcessGroup", () => {
+  const record = { name: "dev", pid: 4242, port: 7800, home: "/tmp/ppd-home", url: "http://127.0.0.1:7800/", paseoBin: "/bin/paseo", paseoVersion: null, webDist: null, startedAt: "2026-11-13T00:00:00.000Z" } satisfies DaemonRecord;
+
+  it("sends SIGTERM alone when the daemon exits in time", async () => {
+    const sent: string[] = [];
+    const outcome = await stopProcessGroup(record, { graceMs: 50, signal: (_pid, signal) => sent.push(signal), alive: () => false, live: () => true });
+    expect(outcome).toBe("stopped");
+    expect(sent).toEqual(["SIGTERM"]);
+  });
+
+  it("forces a daemon that outlives SIGTERM", async () => {
+    const sent: string[] = [];
+    const outcome = await stopProcessGroup(record, { graceMs: 50, signal: (_pid, signal) => sent.push(signal), alive: () => true, live: () => true });
+    expect(outcome).toBe("killed");
+    expect(sent).toEqual(["SIGTERM", "SIGKILL"]);
+  });
+
+  // The pid can exit during the wait and be reused: SIGKILL goes to a process group, so an unrelated group would
+  // be killed. Ownership is re-checked between the two signals.
+  it("does not force a pid that is no longer this daemon", async () => {
+    const sent: string[] = [];
+    const outcome = await stopProcessGroup(record, { graceMs: 50, signal: (_pid, signal) => sent.push(signal), alive: () => true, live: () => false });
+    expect(outcome).toBe("not-ours");
+    expect(sent).toEqual(["SIGTERM"]);
   });
 });

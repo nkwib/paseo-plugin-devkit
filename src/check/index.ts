@@ -8,7 +8,7 @@ import coerce from "semver/functions/coerce.js";
 import satisfies from "semver/functions/satisfies.js";
 import { bundleRequires, disallowedClientRequires, disallowedServerRequires, formatKb, sizeReport } from "./bundle.ts";
 import { compileApprox, CompileError, compileLikePaseo, compileWithHost, describeHost, findEntries, findPaseoApp, findPaseoHost, findPaseoSource, paseoHostVersion, PASEO_COMPILER, type PaseoHost, PASEO_SOURCE_MISSING } from "./compile.ts";
-import { hasContract013 } from "./client-rules.ts";
+import { hasContract013, rulesProvenance } from "./client-rules.ts";
 import { VERIFIED_PASEO } from "../compat.ts";
 import { classSyntaxErrors, findHermes, hermesParse, hermesSmoke } from "./hermes.ts";
 import { boundaryFindings, dependencyFindings, externalPackages, pluginFiles, typesNodeFinding } from "./imports.ts";
@@ -237,7 +237,7 @@ export async function runChecks(pluginDir: string, options: CheckOptions = {}): 
       if ("error" in result) add("client-eval", "fail", `client bundle failed to evaluate: ${result.error}`);
       else if (result.target === "client") {
         result.icons.forEach((icon) => contributionIcons.add(icon));
-        const summary = `contributions: ${result.contributions.join(", ") || "none"} (Paseo ${contract.version} rules)`;
+        const summary = `contributions: ${result.contributions.join(", ") || "none"} (${rulesProvenance(contract.version)})`;
         const notes = [
           ...(contract.excludedHost ? [excludedHostNote(contract)] : []),
           ...(result.setupError ? [`contribution threw under stub host modules (may be a stub limit): ${result.setupError}`] : []),

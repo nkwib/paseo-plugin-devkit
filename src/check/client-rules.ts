@@ -1,8 +1,9 @@
 // Portions adapted from Paseo (https://github.com/getpaseo/paseo) at commit d34d17a9072149320ace35ec2a2e5c7dcd992cb3:
-//   packages/app/src/plugins/evaluate.ts, packages/app/src/plugins/icons.ts, packages/plugin/src/icons.ts
-// That is tag v0.13.0 (the rules are unchanged in v0.14.0), with the v0.13.0-beta.1 and beta.2 steps. The pre-0.13
+//   packages/app/src/plugins/{evaluate.ts, icons.ts, themes/index.ts}, packages/plugin/src/icons.ts
+// That is tag v0.13.0. The four files are byte-identical in v0.14.0 and v0.15.4 (see RULES_SOURCES, which
+// test/rules-drift.test.ts re-checks against a Paseo checkout), with the v0.13.0-beta.1 and beta.2 steps. The pre-0.13
 // rules are from commit 9bd58f66b2dfc195898bf1178e84f02933c0d41e, whose evaluate.ts is the one released in 0.11.2 and
-// 0.12.0.
+// 0.12.0; its theme schema differs only in `name`, which takes a translation message from 0.13.
 // Copyright (c) 2025-present Mohamed Boudra. Licensed under the Apache License, Version 2.0; see THIRD_PARTY_NOTICES.
 // Modified: the registration checks are rewritten as a standalone class with no app or React dependencies, take the
 // icon set and host version as parameters, and collect every violation instead of throwing on the first.
@@ -15,9 +16,50 @@ import compareVersions from "semver/functions/compare.js";
 import parse from "semver/functions/parse.js";
 import { VERIFIED_PASEO } from "../compat.ts";
 
+/** The Paseo release these rules were copied from, and the last release confirmed to still use them. */
+export const RULES_CAPTURED = "0.13.0";
+export const RULES_CONFIRMED_THROUGH = "0.15.4";
+
+/**
+ * The upstream files this one copies, with their SHA-256 at RULES_CONFIRMED_THROUGH. A copy with no alarm goes
+ * stale silently, and `ppd check` would keep passing plugins against rules nobody has re-read, so
+ * test/rules-drift.test.ts compares these against a Paseo checkout whenever PASEO_SOURCE is set.
+ *
+ * When one of these fails: read the upstream file, update the rules below if they changed, then record the new
+ * digest here and set RULES_CONFIRMED_THROUGH to the release that was read.
+ */
+export const RULES_SOURCES: Readonly<Record<string, string>> = {
+  "packages/app/src/plugins/evaluate.ts": "ccf7a268c73e900429083968dcdb0c6ea3fd71eeb238fcd7c8f4bf30c5f435f1",
+  "packages/app/src/plugins/icons.ts": "8da8331c93353a3b78bec8075be0274a5e80bea054a513898f44dbc90a6d3e42",
+  "packages/app/src/plugins/themes/index.ts": "cee518a29faca5aaadc73f0fb5a2b5352fdb827ace882baacc837a4ec66bdbc1",
+  "packages/plugin/src/icons.ts": "a63be14cdcf53e56871178cade18e30e27fd1009c18be643b969f245be43e04c",
+};
+
+/** The pre-0.13 rules in this file are the evaluator released in these two versions. */
+export const RULES_CAPTURED_LEGACY = "0.11.2 and 0.12.0";
+
+/**
+ * How the rules relate to the version they are applied as. `ppd check` used to print "(Paseo <host> rules)",
+ * which claims the host's own rules were applied; they are a copy, and a host released after
+ * RULES_CONFIRMED_THROUGH may have rules nobody has read into this file.
+ */
+export function rulesProvenance(appliedAs: string): string {
+  if (!hasContract013(appliedAs)) return `checked as Paseo ${appliedAs}, rules copied from the ${RULES_CAPTURED_LEGACY} release`;
+  const note = `checked as Paseo ${appliedAs}, rules copied from ${RULES_CAPTURED} and confirmed through ${RULES_CONFIRMED_THROUGH}`;
+  const normalized = coerce(appliedAs)?.version ?? appliedAs;
+  return compareVersions(normalized, RULES_CONFIRMED_THROUGH) > 0 ? `${note}; newer rules unchecked` : note;
+}
+
 const CONTRIBUTION_ID = /^[a-z][a-z0-9-]*$/;
 const PANEL_LOCATIONS = ["workspace", "explorer"];
 const TIMELINE_ITEM_TYPES = ["user_message", "assistant_message", "reasoning", "tool_call", "todo", "error", "compaction"];
+const THEME_KEYS = ["id", "name", "appearance", "colors"];
+const THEME_APPEARANCES = ["light", "dark"];
+const THEME_COLORS = ["background", "foreground", "raised", "control", "border", "mutedForeground", "ring"];
+const THEME_OPTIONAL_COLORS = ["accent"];
+const THEME_NAME_MAX = 60;
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+const HEX_SHAPES = "#rgb, #rrggbb or #rrggbbaa";
 /** File panels, translated labels, `{ svg }` and component icons, and the notification timeline item. */
 export const CONTRACT_0_13 = "0.13.0-beta.1";
 /** Agent panels, and workspace panels without `context`. */
@@ -193,6 +235,47 @@ export class ClientRules {
     if (problem) this.fail(`${owner} has an invalid icon: ${problem}`);
   }
 
+  /**
+   * The theme shape. The app parses the contribution through a strict zod schema inside `addTheme`, so one bad color,
+   * one missing key or one extra key throws and the whole client is dropped with no theme-specific message. The
+   * schema is byte-identical from v0.13.0 through main; the pre-0.13 one differs only in `name`.
+   */
+  private theme(id: string, c: Contribution): void {
+    const extra = Object.keys(c).filter((key) => !THEME_KEYS.includes(key));
+    if (extra.length) this.fail(`Theme ${id} has keys the app does not accept: ${extra.join(", ")}`);
+
+    if (typeof c.name === "string") {
+      const name = c.name.trim();
+      if (!name) this.fail(`Theme ${id} has no name`);
+      else if (name.length > THEME_NAME_MAX) this.fail(`Theme ${id} has a name of ${name.length} characters: the app allows ${THEME_NAME_MAX}`);
+    } else if (!(this.modern && this.isMessage(c.name))) {
+      this.fail(`Theme ${id} has no name: ${this.modern ? "expected a string of 1 to 60 characters or a translation message" : "expected a string of 1 to 60 characters"}`);
+    }
+
+    if (typeof c.appearance !== "string" || !THEME_APPEARANCES.includes(c.appearance)) {
+      this.fail(`Theme ${id} has an invalid appearance: expected "light" or "dark"`);
+    }
+
+    const colors = c.colors;
+    if (typeof colors !== "object" || colors === null || Array.isArray(colors)) {
+      this.fail(`Theme ${id} has no colors: expected ${THEME_COLORS.join(", ")} and the optional accent`);
+      return;
+    }
+    const entries = colors as Record<string, unknown>;
+    const missing = THEME_COLORS.filter((key) => !(key in entries));
+    if (missing.length) this.fail(`Theme ${id} is missing colors: ${missing.join(", ")}`);
+    const unknown = Object.keys(entries).filter((key) => !THEME_COLORS.includes(key) && !THEME_OPTIONAL_COLORS.includes(key));
+    if (unknown.length) this.fail(`Theme ${id} has colors the app does not accept: ${unknown.join(", ")}`);
+    // An optional color left undefined is absent to the schema; a required one left undefined is not a hex color.
+    const invalid = [...THEME_COLORS, ...THEME_OPTIONAL_COLORS].filter(
+      (key) =>
+        key in entries &&
+        !(THEME_OPTIONAL_COLORS.includes(key) && entries[key] === undefined) &&
+        !(typeof entries[key] === "string" && HEX_COLOR.test(entries[key] as string)),
+    );
+    if (invalid.length) this.fail(`Theme ${id} has colors that are not hex colors (${HEX_SHAPES}): ${invalid.join(", ")}`);
+  }
+
   private sidebarItem(section: "header" | "footer", c: Contribution): void {
     const id = this.id(c.id, `sidebar ${section} item id`);
     if (!id) return;
@@ -308,7 +391,9 @@ export class ClientRules {
       }
       case "addTheme": {
         const id = this.id(c.id, "theme id");
-        if (id) this.unique("theme", id, "Duplicate theme");
+        if (!id) return;
+        this.unique("theme", id, "Duplicate theme");
+        this.theme(id, c);
         return;
       }
       case "addTimelineTransformer": {

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { changelogEntries, changelogSection, insertChangelogSection, nextVersion, releaseSteps } from "../src/release.ts";
+import { awaitNpmVersion, changelogEntries, changelogSection, insertChangelogSection, nextVersion, releaseSteps } from "../src/release.ts";
 import { CLI, scratch } from "./helpers.ts";
 
 describe("versions", () => {
@@ -41,6 +41,48 @@ describe("release plan", () => {
   it("bumps, commits, tags, pushes and creates the release in order", () => {
     const argv = releaseSteps("0.5.0", "main", "/x/notes.md", true).flatMap((step) => (step.argv ? [step.argv.slice(0, 3).join(" ")] : []));
     expect(argv).toEqual(["npm version 0.5.0", "git commit -am", "git tag -a", "git push origin", "git push origin", "gh release create"]);
+  });
+
+  it("creates the release straight away when nothing is published to npm", () => {
+    expect(releaseSteps("0.5.0", "main", "/x/notes.md", true).some((step) => step.kind === "await-npm")).toBe(false);
+  });
+
+  it("waits for npm before the release of a published package", () => {
+    const steps = releaseSteps("0.5.0", "main", "/x/notes.md", true, "paseo-plugin-devkit").map((step) => step.kind ?? step.argv!.slice(0, 3).join(" "));
+    expect(steps.indexOf("await-npm")).toBe(steps.indexOf("gh release create") - 1);
+    expect(steps[steps.indexOf("await-npm") - 1]).toBe("git push origin");
+  });
+});
+
+describe("awaitNpmVersion", () => {
+  it("returns once npm serves the version", async () => {
+    const seen: string[] = [];
+    let calls = 0;
+    const served = await awaitNpmVersion("pkg", "1.2.3", {
+      now: () => 0,
+      intervalMs: 1,
+      view: (spec) => {
+        seen.push(spec);
+        return ++calls === 3;
+      },
+      sleep: async () => {},
+    });
+    expect(served).toBe(true);
+    expect(seen).toEqual(["pkg@1.2.3", "pkg@1.2.3", "pkg@1.2.3"]);
+  });
+
+  it("gives up at the deadline instead of blocking the release", async () => {
+    let clock = 0;
+    const served = await awaitNpmVersion("pkg", "1.2.3", {
+      timeoutMs: 30,
+      intervalMs: 10,
+      now: () => clock,
+      view: () => false,
+      sleep: async (ms) => {
+        clock += ms;
+      },
+    });
+    expect(served).toBe(false);
   });
 });
 
@@ -92,6 +134,19 @@ describe("ppd release CLI", () => {
     expect(result.stdout).toContain("git push origin v1.2.4");
     expect(result.stdout).not.toMatch(/git commit|1\.2\.5/);
     expect(result.stdout).toContain("--notes-file '<notes>'");
+  });
+
+  it("resumes when the tag reached origin but no GitHub release did, instead of demanding a higher version", () => {
+    const dir = repo();
+    const git = (...args: string[]) => spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "x", version: "1.2.4" }, null, 2));
+    git("commit", "-qam", "chore: release 1.2.4");
+    git("tag", "-a", "v1.2.4", "-m", "v1.2.4");
+    git("push", "-q", "origin", "v1.2.4");
+    const result = ppd(dir, "1.2.4", "--dry-run");
+    expect(result.stdout).toMatch(/resuming release v1\.2\.4: .*no GitHub release/);
+    expect(result.stdout).toContain("gh release create v1.2.4");
+    expect(result.stdout).not.toMatch(/git commit|npm version/);
   });
 
   it("is blocked when origin cannot take the push, before committing or tagging", () => {

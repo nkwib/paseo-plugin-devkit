@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 (2026-11-13)
+
+### Fixed
+
+- `ppd release` waits for npm to serve the new version before it creates the GitHub release, and says what to run if the publish never lands. A failed publish used to leave a release page, and a registry PR linking to it, for a version npm had never served.
+- The release workflow publishes through Trusted Publishing alone. An `_authToken` line left by `actions/setup-node` with an empty `NODE_AUTH_TOKEN` made npm refuse with `ENEEDAUTH` before OIDC was attempted, which is why 0.3.0 was tagged but never published. The workflow now reports which credential path it took, pins npm to the major that supports Trusted Publishing, publishes a prerelease under the `next` tag, and fails when the registry does not serve what it just published.
+- `ppd release` resumes a release whose tag reached origin but whose GitHub release did not, instead of refusing every version that is not higher than the one in package.json. An npm publish that never serves the version stops the run before the release; the rerun finishes it.
+- The `agent-hook` template appends its card again on Paseo 0.14 and later. Those releases emit `agent.turn_ended` with an empty `timeline`, so the template saw no tool calls and silently appended nothing; it now reads the turn back from the agent's timeline when the event carries none.
+- `ppd check` applies the app's theme schema to `client.addTheme`: a bad hex color, a missing or extra color, an extra key, a missing name, a name over 60 characters or an appearance other than `light` or `dark` makes the app throw and drop the whole client, and `ppd check` now reports each one instead of passing the plugin.
+
+### Changed
+
+- Verified on Paseo 0.15.4: daemon, compiler and web UI, with the full opt-in end-to-end suite green against the installed app. `ppd daemon up` and `ppd doctor` no longer print the version note on it.
+- `client-eval` says where its rules come from instead of claiming they are the host's: `contributions: addWorkspacePanel (checked as Paseo 0.15.4, rules copied from 0.13.0 and confirmed through 0.15.4)`, and warns when the host is newer than the last release the rules were read against.
+- `test/rules-drift.test.ts` hashes the four upstream files the client rules are copied from against a Paseo checkout (`PASEO_SOURCE`), so a rule that drifts fails the weekly CI job instead of going stale unnoticed.
+
 ## 0.3.0 (2026-11-10)
 
 - Add `PaseoWeb.openFiles`, `openFile`, `fileTab`, `chooseFilePanel`, `openWith`, `pinFile`, `closeFile` and `reload` for native file-panel tests. Paths identify tabs by their full workspace-relative name. Tree traversal distinguishes repeated folder names and file basenames.

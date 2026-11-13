@@ -1,6 +1,6 @@
 # Paseo plugin host contract
 
-What Paseo 0.11 to 0.14 actually give a plugin at runtime. `ppd check` tests the rows marked (checked).
+What Paseo 0.11 to 0.15 actually give a plugin at runtime. `ppd check` tests the rows marked (checked).
 
 | Area | Contract | What to do |
 | --- | --- | --- |
@@ -18,6 +18,7 @@ What Paseo 0.11 to 0.14 actually give a plugin at runtime. `ppd check` tests the
 | Git installs (checked) | The manifest `build` runs in a fresh checkout before compile. Runtime packages must be in `dependencies` with a committed lock and `["npm", "ci", "--omit=dev", "--ignore-scripts"]`. | `ppd install --git` exercises this path. |
 | Type walk (checked) | Paseo <= 0.11.4 type-walks installed packages; `@types/node` 26 pulled in `node:stream/iter` and failed installs (getpaseo/paseo#7145). | Pin `@types/node` to `~22` (`paseo plugin init` pulls in 26.x, so add the pin explicitly). |
 | RPC timeout | 30 s per RPC (`REQUEST_TIMEOUT_MS`). Handlers get no abort signal (hooks do get `context.signal`). After a timeout the handler keeps running and holding memory and concurrency. | Deadline every heavy job (`Promise.race`), cap input sizes, test worst-case fixtures with `assertWithinRpcBudget`. Synchronous WASM cannot be interrupted. |
+| Lifecycle hook payloads | `server.on("agent.turn_ended")` is emitted with `timeline: []` from 0.14 on: the daemon publishes the hook without the turn's rows, and the 0.11 to 0.13 names (`agent.turn_ended`, `agent.created`, ...) are aliases of the new ones (`agent.turn.after`, `agent.create.after`) kept until 2027-04-30. A handler that reads `event.timeline` sees an empty turn and silently does nothing. | Read the turn back with `paseo.agents.ref(id).timeline.refetch({ direction: "tail", limit: N, projection: "projected" })` and cut it at the last user message; the `agent-hook` template shows it. |
 | Crashes | A crashed plugin child is not respawned (getpaseo/paseo#6821). One out-of-memory parse takes the plugin down until `paseo plugin reload`. | Size and decompression caps before parsing; stream large formats. |
 | Response size | Direct websocket messages cap at 100 MiB; clients behind the relay should budget well under 32 MiB. Large base64 images add up fast. | Page or chunk responses; budget bytes per response. |
 | MIME and previews | Daemons before 0.13.0 label many binaries, PDFs included, `application/octet-stream`. From 0.13.0 a file panel (`client.addFilePanel`) renders the file tab for the extensions and filenames it claims; before that, plugins have no previewer hook (getpaseo/paseo#3109, #5930). | Detect formats by magic bytes; on 0.13.0 and later register a file panel, otherwise provide your own entry points (panel, Command Center item, slash command). |

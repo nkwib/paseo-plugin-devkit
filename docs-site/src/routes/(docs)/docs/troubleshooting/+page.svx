@@ -98,7 +98,7 @@ lose the whole plugin process. A timer or server left running after the cleanup 
 ```text
 WARN  client-eval      Paseo 0.12.0, which requirements.paseo ">=0.12.0" admits, would reject this client and show none of its UI. Raise requirements.paseo or use only what that release accepts
       Paseo 0.12.0 has no client.addFilePanel (added in 0.13.0), and the contribution threw: client.addFilePanel is not a function. Guard the call with typeof, or require a newer Paseo
-      contributions: addFilePanel (Paseo 0.14.0 rules)
+      contributions: addFilePanel (checked as Paseo 0.14.0, rules copied from 0.13.0 and confirmed through 0.15.4)
 ```
 
 Paseo 0.13.0 added file panels and agent panels (betas: file panels in beta.1, agent and context-free panels in beta.2), made `context` optional on workspace panels, and accepts translated
