@@ -57,21 +57,27 @@ jobs:
             echo "published=true" >> "$GITHUB_OUTPUT"
             echo "::warning::$name@$version is already on npm: the publish is skipped, so this run does not exercise Trusted Publishing."
           fi
-      # Trusted Publishing (OIDC) needs no secret and signs provenance itself. setup-node writes an _authToken
-      # line into the runner npmrc; when it carries a value npm takes the legacy token path and never attempts
-      # OIDC, and when it expands to nothing npm can refuse with ENEEDAUTH first. Name which path this run took.
+      # Trusted Publishing (OIDC) needs no secret and signs provenance itself. setup-node writes
+      # `_authToken=${NODE_AUTH_TOKEN}` into the runner npmrc, and npm expands it when it reads the file: with the
+      # variable set npm takes the legacy token path and never attempts OIDC, with it unset the line expands to
+      # nothing and npm can refuse with ENEEDAUTH first. The placeholder itself is not a credential, so report what
+      # the line expands to, not that it is non-empty.
       - name: Report the npm credential path
         if: steps.npm.outputs.published != 'true'
         run: |
           rc="${NPM_CONFIG_USERCONFIG:-$HOME/.npmrc}"
-          if [ -f "$rc" ] && grep -q '_authToken' "$rc"; then
-            if grep -qE '_authToken=[[:space:]]*$' "$rc"; then
-              echo "::warning::$rc carries an empty _authToken line; npm may refuse before OIDC is attempted."
+          if [ ! -f "$rc" ] || ! grep -q '_authToken' "$rc"; then
+            echo "No _authToken line in $rc: npm uses Trusted Publishing."
+          elif grep -qE '_authToken=[[:space:]]*\$\{[A-Za-z_][A-Za-z0-9_]*\}[[:space:]]*$' "$rc"; then
+            if [ -n "${NODE_AUTH_TOKEN:-}" ]; then
+              echo "::warning::$rc expands _authToken from NODE_AUTH_TOKEN, which is set: npm takes the legacy token path, not OIDC."
             else
-              echo "::warning::$rc carries a non-empty _authToken; npm will use the legacy token path, not OIDC."
+              echo "$rc holds an unexpanded _authToken placeholder and NODE_AUTH_TOKEN is unset: npm uses Trusted Publishing."
             fi
+          elif grep -qE '_authToken=[[:space:]]*$' "$rc"; then
+            echo "::warning::$rc carries an empty _authToken line; npm may refuse with ENEEDAUTH before OIDC is attempted."
           else
-            echo "No _authToken line in $rc: npm will use Trusted Publishing."
+            echo "::warning::$rc carries a literal _authToken: npm takes the legacy token path, not OIDC."
           fi
       - if: steps.npm.outputs.published != 'true'
         run: npm publish --access public --tag "${{ steps.npm.outputs.tag }}"
@@ -80,14 +86,16 @@ jobs:
       - name: Verify npm serves the published version
         if: steps.npm.outputs.published != 'true'
         run: |
+          # Read-after-write on the registry is not immediate: 0.4.0 took longer than a minute to be served after a
+          # successful publish, which failed this step over a good release. Five minutes, then call it a real failure.
           spec="${{ steps.npm.outputs.name }}@${{ steps.npm.outputs.version }}"
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in $(seq 1 20); do
             if npm view "$spec" version --prefer-online >/dev/null 2>&1; then
               echo "npm serves $spec"
               exit 0
             fi
-            echo "attempt $attempt: npm does not serve $spec yet"
-            sleep 10
+            echo "attempt $attempt of 20: npm does not serve $spec yet"
+            sleep 15
           done
-          echo "npm did not serve $spec although publish reported success" >&2
+          echo "npm has not served $spec five minutes after publish reported success: check npmjs.com before releasing again" >&2
           exit 1

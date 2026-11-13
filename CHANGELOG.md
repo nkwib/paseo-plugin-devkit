@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The release workflow no longer reports the wrong npm credential path. `actions/setup-node` writes the literal `_authToken=${NODE_AUTH_TOKEN}` into the runner npmrc, and the check read that placeholder as a token, so a run publishing through Trusted Publishing was told it was taking the legacy token path.
+- The post-publish check waits five minutes for the registry instead of one. npm served 0.4.0 later than that, which failed the release workflow over a publish that had succeeded.
+
 ## 0.4.0 (2026-11-13)
 
 ### Fixed
